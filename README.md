@@ -1,5 +1,7 @@
 # Scheduling Manager
 
+<a href="https://www.buymeacoffee.com/flatsheep"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy me a coffee" height="60" width="217"></a>
+
 [![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=flatsheep&repository=scheduling-manager&category=integration)
 
 **A clearer way to manage your Home Assistant schedules.**
