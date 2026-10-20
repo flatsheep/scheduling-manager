@@ -1,0 +1,53 @@
+name: Standards and regressions
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ha: ["2026.7.0", "2026.8.1", "2026.9.4"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build isolated development image
+        run: docker build -f tools/Dockerfile.dev --build-arg HA_IMAGE=ghcr.io/home-assistant/home-assistant:${{ matrix.ha }} -t hsm-dev:test .
+      - name: Lint, types, lifecycle and coverage
+        run: |
+          docker run --rm --network none -v "$PWD:/work:ro" \
+            -e RUFF_CACHE_DIR=/tmp/ruff-cache -e COVERAGE_FILE=/tmp/coverage \
+            --entrypoint sh hsm-dev:test -c '
+              python -m ruff check . &&
+              python -m ruff format --check custom_components/heating_schedule_manager/__init__.py custom_components/heating_schedule_manager/runtime.py custom_components/heating_schedule_manager/config_flow.py custom_components/heating_schedule_manager/switch.py custom_components/heating_schedule_manager/diagnostics.py custom_components/heating_schedule_manager/websocket_api.py custom_components/heating_schedule_manager/presentation.py &&
+              python -m mypy --cache-dir=/tmp/mypy-cache &&
+              python tools/check_backend.py --coverage'
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Official HA integration validation
+        run: docker run --rm --network none -v "$PWD:/github/workspace:ro" ghcr.io/home-assistant/hassfest@sha256:c79061c27ff0b4c43534d9a0ae67b19fe320261be8c0aded32b117e0272237e3
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:browser -- --workers=2

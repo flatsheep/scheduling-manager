@@ -1,0 +1,9 @@
+{
+  "entity": {
+    "switch": {
+      "away": {
+        "default": "mdi:home-export-outline"
+      }
+    }
+  }
+}

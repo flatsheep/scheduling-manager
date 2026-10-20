@@ -1,0 +1,92 @@
+# Engineering checklist only: custom integrations do not acquire an official tier.
+rules:
+  action-setup: done
+  appropriate-polling:
+    status: exempt
+    comment: Local calendar timers and HA events; the Away entity is push-updated and never polled.
+  brands: todo
+  common-modules: done
+  config-flow-test-coverage: done
+  config-flow: done
+  dependency-transparency: done
+  docs-actions: done
+  docs-triggers:
+    status: exempt
+    comment: No integration-specific automation triggers are provided.
+  docs-conditions:
+    status: exempt
+    comment: No integration-specific automation conditions are provided.
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done
+  entity-event-setup: done
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure:
+    status: exempt
+    comment: Local helper with no external connection, credentials or user connection parameters.
+  test-before-setup: done
+  unique-config-entry: done
+  action-exceptions: done
+  config-entry-unloading: done
+  docs-configuration-parameters: done
+  docs-installation-parameters: done
+  entity-unavailable: done
+  integration-owner: todo
+  log-when-unavailable:
+    status: exempt
+    comment: Device connectivity is owned by the target integrations; pending errors are exposed through the manager API without repeat enforcement logs.
+  parallel-updates: done
+  reauthentication-flow:
+    status: exempt
+    comment: Uses HA's authenticated session; no separate account or credentials exist.
+  test-coverage:
+    status: todo
+    comment: Last full coverage was 96.80% for 1.8.0. Timed Away has focused checks only at the user's request; rerun coverage before claiming this rule for 1.9.0.
+  diagnostics: done
+  entity-translations: done
+  exception-translations: done
+  icon-translations: done
+  repair-issues: done
+  devices:
+    status: exempt
+    comment: A local helper controlling existing entities; it does not create physical devices.
+  discovery:
+    status: exempt
+    comment: No external device or service is discovered by this helper.
+  discovery-update-info:
+    status: exempt
+    comment: No external network endpoint is stored.
+  dynamic-devices:
+    status: exempt
+    comment: Does not own a device registry collection; memberships reference existing entities.
+  stale-devices:
+    status: exempt
+    comment: No device registry entries are created.
+  reconfiguration-flow:
+    status: exempt
+    comment: The config entry has no connection parameters; validated schedules are edited through the card.
+  entity-category:
+    status: exempt
+    comment: Away is a normal user-facing control, not a diagnostic or setup-only entity.
+  entity-device-class:
+    status: exempt
+    comment: No switch device class represents an Away scheduling mode.
+  entity-disabled-by-default:
+    status: exempt
+    comment: The only entity is the essential Away control.
+  docs-data-update: done
+  docs-examples: done
+  docs-known-limitations: done
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-troubleshooting: done
+  docs-use-cases: done
+  async-dependency:
+    status: exempt
+    comment: No external client library; all dispatch uses HA's asynchronous APIs.
+  inject-websession:
+    status: exempt
+    comment: No outbound HTTP client is used.
+  strict-typing: todo

@@ -1,0 +1,6 @@
+ARG HA_IMAGE=ghcr.io/home-assistant/home-assistant:2026.8.1
+FROM ${HA_IMAGE}
+RUN pip install --no-cache-dir --root-user-action=ignore \
+    ruff==0.14.0 mypy==1.18.2 coverage==7.10.7
+WORKDIR /work
+ENTRYPOINT ["python"]

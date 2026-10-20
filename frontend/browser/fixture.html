@@ -1,0 +1,66 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Heating Schedule — mocked dashboard</title><style>body{margin:20px;background:#f2f3f4;font-family:Arial}heating-schedule-manager-card{max-width:1600px;margin:auto;--primary-text-color:#202020;--secondary-text-color:#626262;--card-background-color:#fff;--secondary-background-color:#f3f3f3;--primary-color:#286dcc}@media(max-width:500px){body{margin:8px}}</style></head><body>
+<hui-view id="fixture-view"><heating-schedule-manager-card></heating-schedule-manager-card></hui-view>
+<script type="module">
+import '/card.js';
+const id=()=>crypto.randomUUID();
+const kitchen=id(), lounge=id(), master=id(),ensuite=id();
+const temperature=value=>({value,unit:'°C'});
+const setting=(entity_id)=>({entity_id,registry_id:null,setback:temperature(13)});
+const band=(start,end)=>({id:id(),start_minute:start,end_minute:end});
+const sub=(days,bands)=>({id:id(),days,bands});
+const section=(name,keys,subs)=>({id:id(),name,enabled:true,entities:keys.map(entity_key=>({entity_key,target:temperature(21)})),sub_schedules:subs});
+window.mock={writes:[],fail:false,subscriptions:[],saved:{editable:true,timezone:'Europe/London',status:{},model:{revision:1,away:false,entity_settings:{[kitchen]:setting('climate.kitchen'),[lounge]:setting('climate.lounge'),[master]:setting('climate.master'),[ensuite]:setting('climate.ensuite')},schedules:[section('Schedule 1',[kitchen,lounge],[sub([0,1,2,3,4,5,6],[band(120,320),band(720,960)])]),section('Schedule 2',[kitchen],[sub([0,1,2,3,4,5,6],[band(720,960)])]),section('Schedule 3',[master,ensuite],[sub([1],[band(720,960)])])]}}};
+const names=['Kitchen','Lounge','Master Bedroom with a long friendly name','Ensuite','Office'];
+const caps=names.map((name,i)=>({entity_id:['climate.kitchen','climate.lounge','climate.master','climate.ensuite','climate.office'][i],registry_id:null,name,unit:'°C',min:7,max:35,step:.5,current:20,supported:true,available:true}));
+caps.push(
+  {entity_id:'light.hall',registry_id:null,name:'Hall Light',kind:'state',options:['on','off'],current:'off',supported:true,available:true},
+  {entity_id:'switch.plug',registry_id:null,name:'Plug',kind:'state',options:['on','off'],current:'on',supported:true,available:true},
+  {entity_id:'select.scene',registry_id:null,name:'Scene selector',kind:'state',options:['Relax','Focus','Off'],current:'Relax',supported:true,available:true},
+  {entity_id:'number.level',registry_id:null,name:'Level',kind:'number',min:0,max:100,step:1,current:20,supported:true,available:true},
+  {entity_id:'cover.blinds',registry_id:null,name:'Blinds',kind:'state',options:['open','closed'],current:'closed',supported:true,available:true},
+  {entity_id:'text.message',registry_id:null,name:'Message',kind:'text',min_length:0,max_length:255,current:'Morning scene',supported:true,available:true},
+  {entity_id:'datetime.reminder',registry_id:null,name:'Reminder',kind:'datetime',current:'2026-07-06T10:00:30+00:00',supported:true,available:true},
+  {entity_id:'sensor.readonly',registry_id:null,name:'Read-only sensor',kind:'state',options:[],current:'20',supported:false,available:true}
+);
+const updatePresentation=()=>{
+  const parts=new Intl.DateTimeFormat('en-GB',{timeZone:mock.saved.timezone,weekday:'long',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+  const part=type=>parts.find(value=>value.type===type).value,day=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].indexOf(part('weekday')),minute=Number(part('hour'))*60+Number(part('minute'));
+  const solar=mock.saved.solar_times?.['2026-07-06']??{};
+  mock.saved.active_schedules=Object.fromEntries(mock.saved.model.schedules.map(s=>[s.id,s.enabled!==false&&!(mock.saved.model.away&&s.away_enabled!==false)&&s.sub_schedules.some(sub=>sub.days.includes(day)&&sub.bands.some(b=>{
+    const resolve=endpoint=>b[endpoint+'_dynamic']?Math.max(0,Math.min(1440,(solar[b[endpoint+'_dynamic'].event]??NaN)+b[endpoint+'_dynamic'].offset)):b[endpoint+'_minute'];
+    const start=resolve('start'),end=Math.max(start,resolve('end'));return start<=minute&&minute<end;
+  }))]));
+  const room={'climate.kitchen':['kitchen','Kitchen','ground','Ground floor'],'climate.lounge':['lounge','Lounge','ground','Ground floor'],'climate.master':['bedroom','Bedroom','upper','Upper floor'],'climate.ensuite':['ensuite','Ensuite','upper','Upper floor']};
+  mock.saved.locations={...Object.fromEntries(Object.entries(mock.saved.model.entity_settings).map(([key,setting])=>{const [area_id,area_name,floor_id,floor_name]=room[setting.entity_id]??[null,null,null,null];return[key,{area_id,area_name,floor_id,floor_name}];})),...mock.location_overrides};
+};
+const notify=()=>{updatePresentation();mock.subscriptions.forEach(fn=>fn(structuredClone(mock.saved)));};
+mock.saved.solar_times=Object.fromEntries(Array.from({length:8},(_,i)=>[`2026-07-${String(6+i).padStart(2,'0')}`,{sunrise:300+i,sunset:1260-i,dawn:260+i,dusk:1300-i,noon:780,midnight:60}]));
+window.mock.notify=notify;
+const hass={states:Object.fromEntries(caps.map(c=>[c.entity_id,{attributes:{friendly_name:c.name}}])),connection:{subscribeMessage:async(fn)=>{mock.subscriptions.push(fn);return()=>{mock.subscriptions=mock.subscriptions.filter(x=>x!==fn);};}},callWS:async msg=>{
+  if(msg.type.endsWith('/get')){updatePresentation();return structuredClone(mock.saved);}
+  if(msg.type.endsWith('/capabilities'))return structuredClone(caps);
+  mock.writes.push(structuredClone(msg));
+  if(mock.fail)throw new Error('Mock storage failure');
+  if(msg.expected_revision!==mock.saved.model.revision)throw new Error('Conflict: saved state changed elsewhere');
+  if(msg.type.endsWith('/set_away')){
+    mock.saved.model.away=msg.away;
+    if(!msg.away||msg.until===null)delete mock.saved.model.away_until;
+    else if(msg.until){
+      const requested=Date.parse(msg.until+'Z');let instant=requested;
+      for(let i=0;i<2;i++){
+        const parts=new Intl.DateTimeFormat('en-CA',{timeZone:mock.saved.timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(instant));const part=type=>parts.find(value=>value.type===type).value;
+        const observed=`${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}Z`;instant+=requested-Date.parse(observed);
+      }
+      mock.saved.model.away_until=new Date(instant).toISOString();
+    }
+  }
+  if(msg.type.endsWith('/set_section_enabled'))mock.saved.model.schedules.find(s=>s.id===msg.section_id).enabled=msg.enabled;
+  if(msg.type.endsWith('/save_section')){
+    const model=mock.saved.model;const i=model.schedules.findIndex(s=>s.id===msg.section_id);
+    if(msg.operation==='delete')model.schedules.splice(i,1);else{if(i===-1)model.schedules.push(msg.section);else model.schedules[i]=msg.section;Object.assign(model.entity_settings,msg.settings);}
+  }
+  mock.saved.model.revision++;notify();return structuredClone(mock.saved);
+}};
+const view=document.getElementById('fixture-view');view.index=0;view.lovelace={config:{views:[{title:'Generated fallback'}]},rawConfig:{views:[{title:'Heating Schedule'}]}};
+const card=document.querySelector('heating-schedule-manager-card');card.setConfig({title:'Ignored card title'});card.hass=hass;
+</script></body></html>

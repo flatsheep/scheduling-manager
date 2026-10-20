@@ -1,0 +1,40 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Scheduling Manager",
+        "description": "Create a shared, local schedule manager. Configure schedules using the companion dashboard card."
+      }
+    },
+    "abort": {
+      "already_configured": "Only one manager is supported."
+    }
+  },
+  "entity": {
+    "switch": {
+      "away": {
+        "name": "Scheduling Manager Away"
+      }
+    }
+  },
+  "exceptions": {
+    "unsupported_version": {
+      "message": "Scheduling Manager requires Home Assistant 2026.7 or later."
+    },
+    "invalid_storage": {
+      "message": "The saved schedule data cannot be loaded: {error}. The original storage file has been preserved. See the Scheduling Manager repair issue."
+    },
+    "storage_unavailable": {
+      "message": "Scheduling Manager storage is temporarily unavailable. Check disk space and file permissions, then retry."
+    },
+    "invalid_action": {
+      "message": "The Scheduling Manager action could not be completed: {error}."
+    }
+  },
+  "issues": {
+    "invalid_storage": {
+      "title": "Scheduling Manager cannot load its saved schedules",
+      "description": "The schedule storage is invalid or uses an unsupported format: {error}. The original `.storage/heating_schedule_manager` file has not been replaced. Restore a known-good Home Assistant backup, then reload the integration. Do not delete the original file to clear this issue; doing so would discard saved schedules. This issue clears after successful setup."
+    }
+  }
+}
