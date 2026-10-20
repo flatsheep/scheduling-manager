@@ -12,14 +12,20 @@ The Python integration runs all scheduling with the dashboard closed. The compan
   bands and a single current-time line.
 - **Multiple entities per schedule:** combine thermostats and other supported
   writable entities, each with its own start/target and end/setback values.
-- **Different routines for different days:** group weekdays and weekends into
-  named sub-schedules without creating separate top-level schedules.
+- **Sub-schedules for individual days or groups of days:** create a different
+  sub-schedule for every day, or group days that share a routine. Give each a
+  logical name and add multiple time bands to its timetable. In view mode,
+  tap a day to peek at its sub-schedule.
 - **Fixed or solar times:** use clock times, or solar events with offsets,
-  independently at each end of a time band.
+  independently at each end of a time band. In edit mode, double-tap/click a
+  blank part of the timeline to create a band, or choose **Add time band**.
+  Drag fixed-time endpoint markers or enter times manually in the popup.
 - **Categories and filters:** organise schedules and narrow the view by
   category, HA area, floor or whether a schedule is active now.
-- **Everyday controls:** enable/disable individual schedules, preview other
-  days, and use Away indefinitely or until a chosen return time.
+- **Everyday controls:** enable/disable individual schedules and preview other
+  days. Choose which schedules are included in Away mode: global **Away**
+  suspends those schedules until you turn Away off or the return date/time
+  you set is reached. Excluded schedules continue normally.
 - **Backend scheduling and recovery:** schedules run with the dashboard closed;
   pending commands and missed transitions are handled across device outages
   and HA restarts.
@@ -147,27 +153,36 @@ For other supported entities, the same positions hold start/end states or
 values—for example **ON → light → OFF**. The small trash control removes an
 entity from the draft; it takes effect only when you save.
 
-### 3. Select days and optionally add a weekend routine
+### 3. Group days into named sub-schedules
 
-Select the weekday buttons that should share this timetable. Selected days
-turn green. The optional **Sub-schedule name** labels that group of days.
+Select one day or a group of days that should share a timetable. Selected days
+turn green. Give the group an optional, logical **Sub-schedule name**, such as
+*Weekdays*, *Weekends* or *Monday*. Each sub-schedule has its own time bands;
+all of its selected days use those same bands.
 
 | Weekday routine | Weekend routine |
 | --- | --- |
 | <img src="docs/images/weekday-group.png" alt="Monday through Friday selected and the sub-schedule named Weekdays" width="420"> | <img src="docs/images/weekend-group.png" alt="Saturday and Sunday selected in the second sub-schedule named Weekends" width="420"> |
 
-To give weekends different times, use the **＋ beside the sub-schedule
+For example, to give weekends different times, use the **＋ beside the sub-schedule
 dropdown**, select Saturday and Sunday, and optionally name that group
 *Weekends*. Switch between the groups using the dropdown, then add time bands
-for each. Days already assigned to another group cannot be selected until
-released from that group. You can have up to seven sub-schedules, provided
-each has its own days.
+for each. Alternatively, create a separate sub-schedule for every day, each
+with its own logical name and up to ten time bands. Days already assigned to
+another group cannot be selected until released from that group. You can have
+up to seven sub-schedules, provided each has its own days.
+
+After saving, tap a day in view mode to peek at its sub-schedule. Previewing
+does not edit the timetable or command devices; see
+[day previews](#preview-another-days-routine).
 
 ### 4. Add time bands
 
-Choose **＋ Add time band**, set the Start and End, then press **Apply**.
-Repeat for additional periods, such as morning and evening. Each sub-schedule
-can have up to ten bands.
+In **edit mode**, double-tap/click a blank part of the timeline to create a
+one-hour band where there is room. Alternatively, choose **＋ Add time band**,
+set the Start and End in the popup, then press **Apply**. Repeat for additional
+periods, such as morning, afternoon and evening. Each sub-schedule can have
+up to ten bands.
 
 ![A dashed time band between an orange 07:40 solar start marker and blue 11:30 end marker](docs/images/time-band.png)
 
@@ -187,8 +202,11 @@ for sunrise/sunset settings and offsets.
 ### 5. Choose a category and Away participation
 
 Use **Category** to group related schedules, for example *Heating* or *Lights*.
-Use **Away included / Away excluded** to choose whether this schedule pauses
-when Away is active. These choices are part of the draft until you save.
+Use **Away included / Away excluded** to choose whether the global Away
+control affects this schedule. Included schedules have their normal transitions
+suspended until you turn Away off or its chosen return date/time is reached;
+excluded schedules continue normally. These choices are part of the draft until
+you save. See [Away](#away) for its device-setting behaviour.
 
 ![Schedule editor actions: add Entity, Away included, Category Heating, Delete, Cancel and Save](docs/images/edit-actions.png)
 
