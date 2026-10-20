@@ -2,7 +2,7 @@
 
 [![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=flatsheep&repository=scheduling-manager&category=integration)
 
-**See your schedules. Shape your routines.**
+**A clearer way to manage your Home Assistant schedules.**
 
 Scheduling Manager brings your Home Assistant schedules together in one clear,
 interactive view. See what happens when, which devices each schedule controls,
