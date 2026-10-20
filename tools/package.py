@@ -15,6 +15,7 @@ def main():
     files += [(ROOT / 'dist' / name, 'www/' + name) for name in ('scheduling-manager-card.js','heating-schedule-manager-card.js')]
     files += [(ROOT / name, name) for name in ('README.md', 'API.md', 'TEST_RESULTS.md', 'HA_STANDARDS.md', 'HACS_PUBLISHING.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md')]
     # Local artifacts can contain private installation data; never package them.
+    files += [(p, str(p.relative_to(ROOT))) for p in (ROOT / 'docs/images').glob('*.png')]
     with ZipFile(output, 'w', compression=ZIP_DEFLATED) as archive:
         for source, destination in sorted(files, key=lambda pair: pair[1]):
             info = ZipInfo(destination, date_time=(2026, 10, 6, 0, 0, 0))

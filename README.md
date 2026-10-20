@@ -4,6 +4,42 @@ A local, installable Home Assistant custom integration and dashboard card for **
 
 The Python integration runs all scheduling with the dashboard closed. The companion TypeScript/Lit card edits private section drafts and uses HA's existing authenticated connection.
 
+![Scheduling Manager overview showing grouped heating and lighting schedules, weekday badges and aligned timelines](docs/images/overview.png)
+
+## Features at a glance
+
+- **One shared timetable:** see multiple schedules together, with aligned time
+  bands and a single current-time line.
+- **Multiple entities per schedule:** combine thermostats and other supported
+  writable entities, each with its own start/target and end/setback values.
+- **Different routines for different days:** group weekdays and weekends into
+  named sub-schedules without creating separate top-level schedules.
+- **Fixed or solar times:** use clock times, or solar events with offsets,
+  independently at each end of a time band.
+- **Categories and filters:** organise schedules and narrow the view by
+  category, HA area, floor or whether a schedule is active now.
+- **Everyday controls:** enable/disable individual schedules, preview other
+  days, and use Away indefinitely or until a chosen return time.
+- **Backend scheduling and recovery:** schedules run with the dashboard closed;
+  pending commands and missed transitions are handled across device outages
+  and HA restarts.
+
+**Start here:** [Install](#install) · [Create your first schedule](#create-your-first-schedule)
+· [Solar time bands](#fixed-and-dynamic-time-band-endpoints)
+· [Categories and filters](#categories-and-display-order) · [Away](#away)
+
+### Development transparency
+
+This project was **vibe coded: developed with substantial AI assistance using
+OpenCode**. The maintainer directed the requirements, interface design and
+scheduling behaviour, while AI coding tools helped write and revise the
+backend, frontend, tests and documentation through iterative development.
+
+Verification includes automated backend tests, frontend unit and browser tests,
+Home Assistant integration validation, and use in a real HA installation.
+See [test results](TEST_RESULTS.md) for the checks performed, versions tested
+and remaining limitations.
+
 Release 1.7.0 modernizes runtime ownership, naming/translations, push-only Away updates, setup/Repairs errors, diagnostics and automated checks. See [HA standards alignment](HA_STANDARDS.md) for verification, removal/recovery instructions and remaining publication/strict-typing work. This remains a custom integration without an official quality-tier assignment.
 
 ## Install
@@ -78,6 +114,96 @@ The card heading derives from the **containing dashboard view's Title**. An unti
 ### Compatible rename
 
 The integration's internal domain, config-entry identity, storage key, WebSocket namespace and Away unique/entity ID remain `heating_schedule_manager` / `switch.heating_schedule_away` for compatibility with saved schedules and automations. Keep the installation folder `custom_components/heating_schedule_manager/` as shown above. Existing `custom:heating-schedule-manager-card` cards and `/local/heating-schedule-manager-card.js` resources remain supported by the bundled compatibility alias; new configurations should use the new names above.
+
+## Create your first schedule
+
+### 1. Add and name a schedule
+
+Use **＋ Schedule** in the header. The other header controls collapse/expand
+categories (**Hide all / Show all**), open **Filter**, and control **Away**.
+
+![Header controls: Hide all, Filter, add Schedule and Away](docs/images/toolbar.png)
+
+A new schedule opens in edit mode. Tap or click **New Schedule** in the left
+panel to give it a meaningful name, such as *Heating* or *Outside lights*.
+The timetable starts empty; Save remains disabled until the schedule is valid.
+
+![New schedule editor with entity, weekday, time-band and Save controls](docs/images/new-schedule.png)
+
+### 2. Add entities and choose their start/end settings
+
+Choose **＋ Entity**, search for a supported writable entity, and confirm its
+settings. Repeat to add more entities to the same schedule.
+
+![Thermostat row with an orange 21°C target, Lounge name, blue 13°C setback and removal control](docs/images/entity-target-setback.png)
+
+For thermostats, **orange on the left is the start target** and **blue on the
+right is the end setback**. In this example, Lounge receives 21°C at a band's
+start and 13°C at its end. Tap a value while editing to change it. A thermostat's
+setback is shared across its schedules; its orange target is specific to each
+schedule.
+
+For other supported entities, the same positions hold start/end states or
+values—for example **ON → light → OFF**. The small trash control removes an
+entity from the draft; it takes effect only when you save.
+
+### 3. Select days and optionally add a weekend routine
+
+Select the weekday buttons that should share this timetable. Selected days
+turn green. The optional **Sub-schedule name** labels that group of days.
+
+| Weekday routine | Weekend routine |
+| --- | --- |
+| <img src="docs/images/weekday-group.png" alt="Monday through Friday selected and the sub-schedule named Weekdays" width="420"> | <img src="docs/images/weekend-group.png" alt="Saturday and Sunday selected in the second sub-schedule named Weekends" width="420"> |
+
+To give weekends different times, use the **＋ beside the sub-schedule
+dropdown**, select Saturday and Sunday, and optionally name that group
+*Weekends*. Switch between the groups using the dropdown, then add time bands
+for each. Days already assigned to another group cannot be selected until
+released from that group. You can have up to seven sub-schedules, provided
+each has its own days.
+
+### 4. Add time bands
+
+Choose **＋ Add time band**, set the Start and End, then press **Apply**.
+Repeat for additional periods, such as morning and evening. Each sub-schedule
+can have up to ten bands.
+
+![A dashed time band between an orange 07:40 solar start marker and blue 11:30 end marker](docs/images/time-band.png)
+
+The **orange marker** issues the start/target settings; the **blue marker**
+issues the end/setback settings. The dashed line connects the pair. A `*`
+beside a time identifies a solar endpoint, whose resolved time changes with
+the date.
+
+While editing, tap a band or marker to edit its times, or drag a fixed-time
+marker in five-minute steps. Solar endpoints are changed through the popup.
+For an overnight period, create a band to the end of one day and another from
+the start of the next; **23:59 as an End means following midnight**.
+
+See [fixed and dynamic time bands](#fixed-and-dynamic-time-band-endpoints)
+for sunrise/sunset settings and offsets.
+
+### 5. Choose a category and Away participation
+
+Use **Category** to group related schedules, for example *Heating* or *Lights*.
+Use **Away included / Away excluded** to choose whether this schedule pauses
+when Away is active. These choices are part of the draft until you save.
+
+![Schedule editor actions: add Entity, Away included, Category Heating, Delete, Cancel and Save](docs/images/edit-actions.png)
+
+### 6. Save and use the timetable
+
+Press **Save** after every retained sub-schedule has selected days and at least
+one band, and the schedule has at least one entity. **Apply** in a popup updates
+the draft; **Save** commits the schedule. **Cancel** discards the draft after
+confirmation. Use the cog beside the schedule's name to edit it again.
+
+Once saved, the backend runs the timetable even with the dashboard closed.
+Saving changes future events; it does **not** immediately replay the start of
+a band already in progress. Manual device adjustments remain until the next
+applicable transition. **Enable/Disable** and **Away** are explicit controls
+with their own immediate behaviour, described below.
 
 ## Temperature behaviour — important
 
@@ -164,6 +290,17 @@ Every saved schedule is exposed as a read-only `binary_sensor` with a stable UUI
 
 ### Fixed and dynamic time-band endpoints
 
+To use a solar time, open the time-band editor, tick **Solar event** for Start
+or End, choose an event, and set an offset in minutes. A negative offset is
+before the event; a positive offset is after it. The other endpoint can remain
+a fixed clock time.
+
+<img src="docs/images/solar-time-band.png" alt="Time-band popup with Start set to Sunrise, offset zero, a predicted 07:40 time and fixed End at 08:00" width="337">
+
+In this example, the band starts at **sunrise** with no offset and ends at
+**08:00**. The preview shows sunrise at **07:40 on the displayed date**; it is
+not a fixed daily start time. Press **Apply**, then **Save** the schedule.
+
 The time-band popup uses separate **hour and minute selectors** for fixed Start/End times. Minute choices are 00, 05, 10, …, 55, including on iPhones whose native time wheel ignores the HTML step setting. End at hour 23 also offers 59 for the special following-midnight endpoint. A resolved solar clamp can display its exact off-grid minute.
 
 Each endpoint has its own **Solar event** checkbox. Checking it hides the fixed-time picker and shows a dropdown with **Sunrise, Sunset, Dawn, Dusk, Solar noon, Solar midnight**, plus an integer **Offset (minutes)** defaulting to 0 and limited to **−300 through +300**. These are HA's real solar calculations for its configured latitude, longitude, elevation and timezone; no sun entity is required. Dawn/dusk use HA's civil-twilight calculation. Solar midnight is the sun's daily low point, not necessarily clock midnight.
@@ -182,7 +319,31 @@ Solar neighbours wholly before/after the band's stored endpoints provide resolve
 
 In section edit mode, **Category** lets you assign an existing category, create a new one, or choose **Unassigned**. Assignments are private edits until section Save; Cancel discards them. Names are trimmed and case-sensitive. Category names are derived from saved assignments rather than a separate registry: removing or deleting the final assigned section removes that category automatically. Existing sections default to unassigned.
 
+![Schedule category popup with Heating selected and Cancel/Apply buttons](docs/images/schedule-category.png)
+
+Choose the category, press **Apply**, then **Save** the schedule. Categories
+create collapsible groups in the main view; they do not change which schedule
+wins when more than one commands the same entity.
+
 The header's **Filter** control offers Categories, Areas, Floors and **Active now / Inactive now**. Each dimension supports multiple checkbox choices and Select all/mixed state. Choices within a dimension are ORed; dimensions are combined with AND. Area/Floor matching uses linked entities: an entity Area overrides its device Area, and Floor comes from that Area. At least one member must match both selected Area and Floor. No Area/No Floor are offered for unassigned memberships. These are live HA registry metadata, not additional saved schedule assignments.
+
+<details>
+<summary>Show the Filter popup</summary>
+
+<img src="docs/images/filters.png" alt="Filter popup with category, area, floor and running-now checkboxes, plus Cancel and Apply" width="330">
+
+</details>
+
+For example, select **Heating** under Categories and **Downstairs** under
+Floors to show heating schedules with a matching downstairs entity. Add
+**Active now** under Running now to narrow that view to currently active
+schedules. Clear other selections in each of those dimensions as needed;
+leaving **Select all** selected does not narrow that dimension.
+
+Press **Apply** to change your view or **Cancel** to leave it alone. A green
+Filter button and red **✕** indicate applied filters; use **✕** to clear them.
+Filtering hides rows locally—it does not disable schedules or change device
+settings.
 
 **Active now** is authoritative backend time-band activity: the current resolved, non-collapsed band is running, the schedule is enabled, and normal execution is not suspended by its Away participation. Merely being enabled, a thermostat reporting heating, or showing a preview does not imply activity. The predicate uses the scheduler's UTC/DST rules. Apply changes only local presentation; Cancel retains prior filters. The green Filter button and red X identify/reset applied filters. The open editor is retained when excluded. The sort feature is removed.
 
@@ -191,6 +352,19 @@ Schedules are grouped by category in expandable accordions, including Unassigned
 Entity lists retain two columns. Up to **six entities (three rows)** are visible before vertical scrolling; larger lists provide a scrollbar, keyboard-focusable viewport and explicit up/down controls. The first six rows' height is measured so long entity names remain readable. Mouse, touch and keyboard scrolling do not enlarge the timetable or issue device commands.
 
 Entity rows now read **orange start/target → entity name → blue end/setback**, matching the timeline's start/end direction.
+
+#### Preview another day's routine
+
+![Saved weekday badges with Monday to Friday light green, Saturday and Sunday grey, and a Weekdays group label](docs/images/weekday-preview.png)
+
+In view mode, the current day's group is light green and other scheduled days
+are grey. Tap a grey day to preview its timetable without changing saved
+schedules or issuing device commands. The preview uses a dotted overlay and
+blue borders for its linked days. Tap the current green day, the same preview
+day again, or the background to return; it also closes after ten seconds.
+The named badge can open the other sub-schedules in a compact chooser.
+
+#### Editing and interaction reference
 
 - The **cog** opens the section editor. Tap the prominent name box to rename; **＋ Entity** opens the searchable writable-entity picker. Edits stay local until Save.
 - In edit mode, the outlined section trash icon sits immediately left of **Cancel**. Each membership has its own smaller trash icon. Entities remain paired in two columns; **＋ Entity** and **Away included/excluded** sit above the Category / Delete / Cancel / Save row. Icons have accessible names and do not rely on an OS emoji font.
@@ -284,6 +458,8 @@ For isolated scheduler overhead measurements, use the same read-only, network-di
 See [API contracts](API.md) and [test results and boundaries](TEST_RESULTS.md).
 Browser tests generate desktop and phone screenshots locally in `artifacts/`;
 local artifacts and installation records are excluded from the repository.
+The selected documentation screenshots supplied by the maintainer are kept
+separately in `docs/images/` and included with the manual installation archive.
 
 ## License
 
