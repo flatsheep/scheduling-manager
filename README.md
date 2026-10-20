@@ -66,7 +66,7 @@ routines should pause when you're away.
 
 ## Compatibility
 
-**Current versions:** card **1.9.18** / integration **1.9.3**.
+**Current versions:** card **1.9.19** / integration **1.9.4**.
 
 A local, installable Home Assistant custom integration and dashboard card for **HA 2026.7 or later**. Verified releases: **2026.7.0**, **2026.8.1** and **2026.9.4**. See [test results](TEST_RESULTS.md) for exact coverage and limitations; compatibility with later releases is not claimed.
 
@@ -127,7 +127,7 @@ directory. It already includes the built card and its license notices.
 Restart HA, add the integration, then select the card as described above.
 
 For a manual-install ZIP, run `python3 tools/package.py` from the repository
-root. It creates `artifacts/scheduling-manager-1.9.18.zip`. Extract its
+root. It creates `artifacts/scheduling-manager-1.9.19.zip`. Extract its
 `custom_components/` directory into your HA configuration directory.
 
 For a YAML-managed dashboard, the card type is:

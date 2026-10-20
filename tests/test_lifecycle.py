@@ -123,9 +123,12 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         async with TestClient(TestServer(self.hass.http.app)) as client:
             response = await client.get(CARD_URL)
             self.assertEqual(response.status, 200)
+            loader = await response.read()
+            self.assertIn(b"whenDefined('home-assistant')", loader)
+            self.assertIn('javascript', response.headers['Content-Type'])
+            response = await client.get(CARD_PATH)
             bundle = await response.read()
             self.assertIn(b'scheduling-manager-card', bundle)
-            self.assertIn('javascript', response.headers['Content-Type'])
             alias = await client.get(f'/{DOMAIN}/heating-schedule-manager-card.js')
             self.assertEqual(await alias.read(), bundle)
 

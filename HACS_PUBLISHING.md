@@ -13,6 +13,9 @@
   its versioned URL through the supported `frontend.add_extra_js_url` API.
   This works with storage and YAML dashboards, without editing dashboard
   resources or configuration files. Unload removes only its own frontend URL.
+- The registered URL is a small loader which waits for `home-assistant` before
+  importing Lit/the card, so HA's scoped-registry bootstrap cannot erase the
+  card definitions. Loader and bundle URLs both include the card version.
 - The card registers itself in the card picker. Existing card type aliases are
   retained; duplicate module loads do not redefine custom elements. Older
   manual installations should remove their obsolete `/local/` scheduler
@@ -41,8 +44,8 @@
 4. Download through HACS as a custom **Integration** repository. Confirm the real
    end-user card-picker installation and the documented upgrade from a manual
    install. Repository validation is not itself an end-to-end installation test.
-5. Publish the first release as **v1.9.18**, containing integration **1.9.3** and
-   card **1.9.18**. HACS can download the default branch before releases exist.
+5. Publish the first release as **v1.9.19**, containing integration **1.9.4** and
+   card **1.9.19**. HACS can download the default branch before releases exist.
    The generated ZIP is a manual-install fallback, not a HACS `zip_release`.
 6. Submit for the HACS default catalogue separately if desired. A public custom
    repository does not need default-catalogue inclusion to be downloaded.

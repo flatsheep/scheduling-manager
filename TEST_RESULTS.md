@@ -1,5 +1,17 @@
 # Verification results
 
+## Card-picker startup fix · backend 1.9.4 / card 1.9.19
+
+- Reproduced the reported missing custom element with HA frontend **20260930.3**:
+  its scoped-registry bootstrap replaces the registry after an early card import.
+  The card-picker metadata survived but the element definition did not.
+- A small loader now waits for `home-assistant` before importing the card and Lit.
+  This ensures registration happens in HA's final custom-element registry.
+- Production build, **20 unit tests**, **66 browser tests**, targeted frontend
+  backend/lifecycle checks, Ruff, formatting, gradual mypy and hassfest passed.
+  The new browser regression verifies that the bundle is not requested before
+  HA's frontend is defined and becomes available afterwards.
+
 ## HACS single-download packaging · backend 1.9.3 / card 1.9.18
 
 - All **seven backend suites** passed on isolated HA **2026.8.1**, with

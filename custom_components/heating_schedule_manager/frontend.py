@@ -8,17 +8,20 @@ from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN
 
-CARD_VERSION = "1.9.18"
+CARD_VERSION = "1.9.19"
 CARD_PATH = f"/{DOMAIN}/scheduling-manager-card.js"
-CARD_URL = f"{CARD_PATH}?v={CARD_VERSION}"
+LOADER_PATH = f"/{DOMAIN}/scheduling-manager-loader.js"
+CARD_URL = f"{LOADER_PATH}?v={CARD_VERSION}"
 
 
 async def async_setup_assets(hass: HomeAssistant) -> None:
     """Register static routes once, independently of config-entry reloads."""
     bundle = str(Path(__file__).parent / "www" / "scheduling-manager-card.js")
+    loader = str(Path(__file__).parent / "www" / "scheduling-manager-loader.js")
     await hass.http.async_register_static_paths(
         [
             StaticPathConfig(CARD_PATH, bundle, False),
+            StaticPathConfig(LOADER_PATH, loader, False),
             StaticPathConfig(f"/{DOMAIN}/heating-schedule-manager-card.js", bundle, False),
         ]
     )

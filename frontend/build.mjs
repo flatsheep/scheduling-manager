@@ -1,5 +1,5 @@
 import {build} from 'esbuild';
-import {copyFile, mkdir, readFile} from 'node:fs/promises';
+import {copyFile, mkdir, readFile, writeFile} from 'node:fs/promises';
 const component='../custom_components/heating_schedule_manager';
 const {version}=JSON.parse(await readFile('package.json','utf8'));
 const registration=await readFile(`${component}/frontend.py`,'utf8');
@@ -10,4 +10,7 @@ await copyFile('../dist/scheduling-manager-card.js','../dist/heating-schedule-ma
 // HACS installs only the integration directory: ship the complete application there.
 await mkdir(`${component}/www`,{recursive:true});
 await copyFile('../dist/scheduling-manager-card.js',`${component}/www/scheduling-manager-card.js`);
+// HA installs its scoped custom-element registry during app bootstrap.
+// Delay importing Lit/the card until that registry is ready.
+await writeFile(`${component}/www/scheduling-manager-loader.js`,`await customElements.whenDefined('home-assistant');\nawait import('./scheduling-manager-card.js?v=${version}');\n`);
 for(const name of ['LICENSE','THIRD_PARTY_NOTICES.md'])await copyFile(`../${name}`,`${component}/${name}`);

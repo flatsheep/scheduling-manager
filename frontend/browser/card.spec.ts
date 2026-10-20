@@ -689,3 +689,16 @@ test('loading the card through two resource URLs keeps existing tags and one car
   expect(result).toEqual({sameCard:true,sameTimeline:true,entries:1,legacy:true});expect(errors).toEqual([]);
   await expect(page.getByRole('button',{name:'＋ Schedule',exact:true})).toBeVisible();
 });
+
+test('automatic loader waits for HA frontend bootstrap before importing the card',async({page})=>{
+  await page.goto('/loader-fixture');
+  const requests:string[]=[];page.on('request',request=>requests.push(new URL(request.url()).pathname));
+  const loaded=page.waitForResponse(response=>new URL(response.url()).pathname==='/loader.js');
+  await page.evaluate(()=>{const script=document.createElement('script');script.type='module';script.src='/loader.js';document.head.append(script);});
+  await loaded;
+  expect(await page.evaluate(()=>!!customElements.get('scheduling-manager-card'))).toBe(false);
+  expect(requests).not.toContain('/scheduling-manager-card.js');
+  await page.evaluate(()=>customElements.define('home-assistant',class extends HTMLElement{}));
+  await expect.poll(()=>page.evaluate(()=>!!customElements.get('scheduling-manager-card'))).toBe(true);
+  expect(await page.evaluate(()=>(window as any).customCards.map((card:any)=>card.type))).toEqual(['scheduling-manager-card']);
+});
