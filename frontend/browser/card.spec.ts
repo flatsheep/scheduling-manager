@@ -141,9 +141,12 @@ test('timeline labels and markers keep constant proportions across window resizi
   await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();
   const buttons=page.locator('.editing .edit-bottom .tools').getByRole('button');await expect(buttons).toHaveText(['','Cancel','Save']);await expect(buttons.first()).toHaveAccessibleName('Delete section');
   await page.setViewportSize({width:2400,height:1050});
-  const edited=page.locator('.editing hsm-timeline');const {x,y}=await pointAt(edited,400);
+  const edited=page.locator('.editing hsm-timeline');
+  await page.clock.runFor(34);
+  await expect.poll(()=>edited.locator('svg').evaluate((svg:SVGSVGElement)=>{const matrix=svg.getScreenCTM()!;return Math.max(Math.abs(matrix.a-1),Math.abs(matrix.d-1));})).toBeLessThan(.001);
+  const {x,y}=await pointAt(edited,400);
   await page.mouse.move(x,y);await page.mouse.down();await page.clock.runFor(610);await page.mouse.up();
-  expect(await edited.evaluate((el:any)=>el.sub.bands.some((b:any)=>b.start_minute===400&&b.end_minute===460))).toBe(true);
+  await expect.poll(()=>edited.evaluate((el:any)=>el.sub.bands.some((b:any)=>b.start_minute===400&&b.end_minute===460))).toBe(true);
   await page.screenshot({path:'../artifacts/desktop-wide-edit.png',fullPage:true});
 });
 test('view title is used and an untitled view has no fallback heading',async({page})=>{
