@@ -174,4 +174,4 @@ export class HeatingTimeline extends LitElement {
     </svg>${this.edit?html`<div class="marker-tools">${selected?html`<button @click=${()=>this.emit('band-edit',selected.band)}>Edit times</button><button @click=${()=>this.emit('band-delete',selected.band)}>Delete band…</button>`:nothing}</div>`:nothing}`;
   }
 }
-customElements.define('hsm-timeline', HeatingTimeline);
+if(!customElements.get('hsm-timeline'))customElements.define('hsm-timeline', HeatingTimeline);

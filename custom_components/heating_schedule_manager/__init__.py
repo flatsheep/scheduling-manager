@@ -10,6 +10,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN
+from .frontend import async_setup_assets, register_card, unregister_card
 from .runtime import ScheduleConfigEntry
 from .scheduler import Manager
 from .validation import Invalid
@@ -20,8 +21,9 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register authenticated domain APIs once, independently of entry reloads."""
+    """Register domain APIs and bundled card routes once across entry reloads."""
     register(hass)
+    await async_setup_assets(hass)
     return True
 
 
@@ -66,6 +68,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ScheduleConfigEntry) -> 
     entry.runtime_data = manager
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        register_card(hass)
     except BaseException:
         await manager.stop()
         del entry.runtime_data
@@ -80,5 +83,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ScheduleConfigEntry) ->
     if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         return False
     await entry.runtime_data.stop()
+    unregister_card(hass)
     del entry.runtime_data
     return True

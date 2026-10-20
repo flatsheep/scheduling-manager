@@ -12,7 +12,7 @@ def main():
     output = ROOT / 'artifacts' / f"scheduling-manager-{frontend['version']}.zip"
     files = [(p, str(p.relative_to(ROOT))) for p in (ROOT / 'custom_components').rglob('*')
              if p.is_file() and '__pycache__' not in p.parts]
-    files += [(ROOT / 'dist' / name, 'www/' + name) for name in ('scheduling-manager-card.js','heating-schedule-manager-card.js')]
+    # The card is inside custom_components, exactly as downloaded by HACS.
     files += [(ROOT / name, name) for name in ('README.md', 'API.md', 'TEST_RESULTS.md', 'HA_STANDARDS.md', 'HACS_PUBLISHING.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md')]
     # Local artifacts can contain private installation data; never package them.
     files += [(p, str(p.relative_to(ROOT))) for p in (ROOT / 'docs/images').glob('*.png')]

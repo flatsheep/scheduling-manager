@@ -672,3 +672,14 @@ test('Away shows progress while saving and closes after commit while device upda
   await page.evaluate(()=>(window as any).releaseAway());await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByText('Updating devices…',{exact:true})).toBeVisible();
   await page.evaluate(()=>{(window as any).mock.saved.applying=false;(window as any).mock.notify();});await expect(page.getByText('Updating devices…',{exact:true})).toHaveCount(0);
 });
+
+test('loading the card through two resource URLs keeps existing tags and one card-picker entry',async({page})=>{
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  const result=await page.evaluate(async()=>{
+    const card=customElements.get('scheduling-manager-card'),timeline=customElements.get('hsm-timeline');
+    const secondUrl='/card.js?second-resource';await import(secondUrl);
+    return {sameCard:card===customElements.get('scheduling-manager-card'),sameTimeline:timeline===customElements.get('hsm-timeline'),entries:(window as any).customCards.filter((item:any)=>item.type==='scheduling-manager-card').length,legacy:!!customElements.get('heating-schedule-manager-card')};
+  });
+  expect(result).toEqual({sameCard:true,sameTimeline:true,entries:1,legacy:true});expect(errors).toEqual([]);
+  await expect(page.getByRole('button',{name:'＋ Schedule',exact:true})).toBeVisible();
+});

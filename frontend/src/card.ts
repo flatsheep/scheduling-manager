@@ -552,8 +552,8 @@ export class SchedulingManagerCard extends LitElement {
     @media(max-width:420px){header{padding:10px 8px 6px}.entities{gap:4px}.entity button{min-width:30px;padding:4px 2px}.entity .remove{min-width:28px}.name{font-size:20px}.days{gap:4px}.days button{padding:6px 8px}}
   `;
 }
-customElements.define('scheduling-manager-card',SchedulingManagerCard);
+if(!customElements.get('scheduling-manager-card'))customElements.define('scheduling-manager-card',SchedulingManagerCard);
 // Keep existing dashboards/resources compatible while the visible project name changes.
-customElements.define('heating-schedule-manager-card',class extends SchedulingManagerCard {});
+if(!customElements.get('heating-schedule-manager-card'))customElements.define('heating-schedule-manager-card',class extends SchedulingManagerCard {});
 (window as any).customCards=(window as any).customCards??[];
-(window as any).customCards.push({type:'scheduling-manager-card',name:'Scheduling Manager',description:'Shared schedules with temperature and state editing.'});
+if(!(window as any).customCards.some((card:{type:string})=>card.type==='scheduling-manager-card'))(window as any).customCards.push({type:'scheduling-manager-card',name:'Scheduling Manager',description:'Shared schedules with temperature and state editing.'});

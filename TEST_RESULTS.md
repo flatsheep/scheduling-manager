@@ -1,5 +1,26 @@
 # Verification results
 
+## HACS single-download packaging · backend 1.9.3 / card 1.9.18
+
+- All **seven backend suites** passed on isolated HA **2026.8.1**, with
+  **96.11% combined line/branch coverage** and **100%** for the new frontend
+  registration module. Ruff, changed-module formatting and gradual mypy passed.
+- Production frontend build, **20 unit tests** and **65 browser tests** passed.
+  The new browser regression loads the bundle through two URLs and checks
+  custom-element stability, the legacy alias and a single card-picker entry.
+- The integration-only install test serves the actual bundled JavaScript over
+  HTTP without `/config/www` or manual resource configuration. It verifies the
+  route alias, unload/reload, deletion, preserved Away state and retention of
+  unrelated frontend modules. A real YAML-dashboard test verifies its resources
+  are unchanged. Registration/removal is tested for idempotence.
+- Official hassfest: **one valid integration, zero invalid**.
+- The complete application, icon and notices are inside the integration
+  directory. CI checks that rebuilding does not change the committed payload.
+- HACS's repository-validation job is skipped while the repository is private.
+  Actual HACS download and card-picker installation require a public repository
+  and remain a public-release acceptance check; these isolated tests are not a
+  claim of HACS approval or a live deployment.
+
 ## GitHub preparation · backend 1.9.2 / card 1.9.17
 
 - All six backend suites passed on the isolated `hsm-dev:2026.8.1` image;

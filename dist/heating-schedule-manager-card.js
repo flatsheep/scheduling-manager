@@ -1143,7 +1143,7 @@ var HeatingTimeline = class extends i4 {
     </svg>${this.edit ? b2`<div class="marker-tools">${selected ? b2`<button @click=${() => this.emit("band-edit", selected.band)}>Edit times</button><button @click=${() => this.emit("band-delete", selected.band)}>Delete band…</button>` : A}</div>` : A}`;
   }
 };
-customElements.define("hsm-timeline", HeatingTimeline);
+if (!customElements.get("hsm-timeline")) customElements.define("hsm-timeline", HeatingTimeline);
 
 // src/away.ts
 function localDateTime(zone, date = /* @__PURE__ */ new Date()) {
@@ -2103,11 +2103,11 @@ var SchedulingManagerCard = class extends i4 {
   `;
   }
 };
-customElements.define("scheduling-manager-card", SchedulingManagerCard);
-customElements.define("heating-schedule-manager-card", class extends SchedulingManagerCard {
+if (!customElements.get("scheduling-manager-card")) customElements.define("scheduling-manager-card", SchedulingManagerCard);
+if (!customElements.get("heating-schedule-manager-card")) customElements.define("heating-schedule-manager-card", class extends SchedulingManagerCard {
 });
 window.customCards = window.customCards ?? [];
-window.customCards.push({ type: "scheduling-manager-card", name: "Scheduling Manager", description: "Shared schedules with temperature and state editing." });
+if (!window.customCards.some((card) => card.type === "scheduling-manager-card")) window.customCards.push({ type: "scheduling-manager-card", name: "Scheduling Manager", description: "Shared schedules with temperature and state editing." });
 export {
   SchedulingManagerCard
 };

@@ -66,7 +66,7 @@ routines should pause when you're away.
 
 ## Compatibility
 
-**Current versions:** card **1.9.17** / integration **1.9.2**.
+**Current versions:** card **1.9.18** / integration **1.9.3**.
 
 A local, installable Home Assistant custom integration and dashboard card for **HA 2026.7 or later**. Verified releases: **2026.7.0**, **2026.8.1** and **2026.9.4**. See [test results](TEST_RESULTS.md) for exact coverage and limitations; compatibility with later releases is not claimed.
 
@@ -74,76 +74,97 @@ The Python integration runs all scheduling with the dashboard closed. The compan
 
 ## Install
 
-Scheduling Manager is a **service integration**, managed under **Settings →
-Devices & services → Integrations**. Its Away switch and schedule binary sensors
-belong to that integration; they are not separately installed helpers. Existing
-installations upgrading from the helper classification need an HA restart for
-the new classification to take effect. Do not delete/re-add the integration.
+### Install with HACS
 
-Build the manual installation archive with `python3 tools/package.py` from the
-repository root (the built card is included in `dist/`). This creates
-`artifacts/scheduling-manager-1.9.17.zip`. Its `custom_components/` and `www/`
-paths are relative to your Home Assistant **configuration directory** (usually
-`/config`). Extract/copy those two directories into that configuration directory,
-merging with existing directories.
+**One download installs both the scheduler and its matching dashboard card.**
+The integration loads the card automatically—you don't need to copy JavaScript
+files, add a dashboard resource or write YAML.
 
-Alternatively, copy these files manually from this project:
+**Availability:** the repository is currently private. These HACS steps become
+available when it is made public; it is not yet in HACS's default catalogue.
 
-1. Copy the **whole** `custom_components/heating_schedule_manager/` directory into:
-   ```text
-   /config/custom_components/heating_schedule_manager/
-   ```
-   The manifest must be at `/config/custom_components/heating_schedule_manager/manifest.json`, not inside an extra nested project directory.
-2. Copy `dist/scheduling-manager-card.js` to:
-   ```text
-   /config/www/scheduling-manager-card.js
-   ```
-   Create `www` if necessary. No development server or Node.js is needed on HA.
-3. Restart Home Assistant.
-4. Go to **Settings → Devices & services → Add integration**, search for **Scheduling Manager**, then confirm setup. Only one manager instance is supported. Setup creates **Scheduling Manager Away**, preserving the established `switch.heating_schedule_away` identifier.
-5. Add a dashboard resource under **Settings → Dashboards → ⋮ → Resources** (Advanced Mode may need enabling):
-   - URL: `/local/scheduling-manager-card.js?v=1.9.17`
-   - Type: **JavaScript module**
+1. In **HACS**, open the **⋮ menu → Custom repositories**.
+2. Add `https://github.com/flatsheep/scheduling-manager` and choose
+   **Integration** as the category. You only need to do this once.
+3. Search HACS for **Scheduling Manager** and select **Download**.
+4. **Restart Home Assistant.**
+5. Open **Settings → Devices & services → Add integration**, search for
+   **Scheduling Manager**, and add it.
+6. Edit your dashboard, choose **Add card**, then search for and select
+   **Scheduling Manager**. If it is not listed yet, refresh the browser or
+   reopen the companion app and try again.
+7. Choose **＋ Schedule** and start building your first routine.
 
-   For YAML-managed resources:
-   ```yaml
-   lovelace:
-     resources:
-       - url: /local/scheduling-manager-card.js?v=1.9.17
-         type: module
-   ```
-6. Add a **Manual** dashboard card:
-   ```yaml
-    type: custom:scheduling-manager-card
-   ```
-7. As an administrator, choose **＋ Schedule**, enter a name, add entities, choose days and add time bands. **Save** becomes available once every retained sub-schedule has days and bands and the section has at least one entity.
+Once public, you can also use [this shortcut to add the repository to HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=flatsheep&repository=scheduling-manager&category=integration).
 
-On upgrade, replace the integration directory and JS file, restart HA, and change the resource's `?v=` suffix. Reload the dashboard/companion app frontend cache if the old card remains visible. Do not remove `.storage/heating_schedule_manager` when upgrading.
+### Updates
+
+Download updates through **HACS**, restart Home Assistant, then refresh your
+dashboard. The integration and card are updated together, and your saved
+schedules are retained.
+
+<details>
+<summary>Moving from an older manual installation</summary>
+
+Install through HACS and restart HA; keep the existing Scheduling Manager
+integration and dashboard card. Do not delete/re-add the integration or remove
+its saved schedules.
+
+Remove the old **scheduler-only** resource from **Settings → Dashboards →
+Resources** if you previously registered `/local/scheduling-manager-card.js`
+or `/local/heating-schedule-manager-card.js`. The new integration loads its
+bundled card automatically. Leave unrelated resources alone, then refresh
+the browser or reopen the app. Existing card type aliases remain supported.
+
+</details>
+
+<details>
+<summary>Advanced: install without HACS</summary>
+
+Copy the complete `custom_components/heating_schedule_manager/` directory
+from this repository into your HA configuration's `custom_components/`
+directory. It already includes the built card and its license notices.
+Restart HA, add the integration, then select the card as described above.
+
+For a manual-install ZIP, run `python3 tools/package.py` from the repository
+root. It creates `artifacts/scheduling-manager-1.9.18.zip`. Extract its
+`custom_components/` directory into your HA configuration directory.
+
+For a YAML-managed dashboard, the card type is:
+
+```yaml
+type: custom:scheduling-manager-card
+```
+
+The card is loaded automatically in YAML mode too; no resource entry is needed.
+
+</details>
 
 ### Remove
 
 Open **Settings → Devices & services → Integrations → Scheduling Manager**,
 then use the configuration entry's menu to **Delete** it. This stops scheduling
-and removes its associated entities without changing device settings. Remove the
-dashboard card/resource and manually installed integration/JS files separately.
+and removes its associated entities without changing device settings. Its
+automatically registered frontend module is removed too. Remove the dashboard
+card, then uninstall the package through **HACS** to remove its files.
 Saved schedules are deliberately retained for recovery if the integration is
 added again; deleting the entry is not a factory reset. See
 [Removal and recovery](HA_STANDARDS.md#removal-and-recovery) for permanent data
 removal instructions.
 
-### Future HACS distribution
+### Publication status
 
-The project includes a root `hacs.json` for a future **Integration** repository,
-with HA 2026.7.0 as its minimum version. Publication is still pending; the current
-installation ZIP is for manual installation, not a HACS release archive.
-See [HACS publication preparation](HACS_PUBLISHING.md) for the remaining work,
-including delivery of the companion dashboard card.
+The HACS package includes the integration, built card, license notices and brand
+icon. The repository is private pending public release. See
+[HACS publication preparation](HACS_PUBLISHING.md) for validation and release
+status. Public custom-repository installation and inclusion in HACS's default
+catalogue are separate steps.
 
 The card heading derives from the **containing dashboard view's Title**. An untitled view leaves it blank. A legacy card-level `title` is ignored; no fallback title is inserted.
 
 ### Compatible rename
 
-The integration's internal domain, config-entry identity, storage key, WebSocket namespace and Away unique/entity ID remain `heating_schedule_manager` / `switch.heating_schedule_away` for compatibility with saved schedules and automations. Keep the installation folder `custom_components/heating_schedule_manager/` as shown above. Existing `custom:heating-schedule-manager-card` cards and `/local/heating-schedule-manager-card.js` resources remain supported by the bundled compatibility alias; new configurations should use the new names above.
+The integration's internal domain, config-entry identity, storage key, WebSocket namespace and Away unique/entity ID remain `heating_schedule_manager` / `switch.heating_schedule_away` for compatibility with saved schedules and automations. Keep the installation folder `custom_components/heating_schedule_manager/` as shown above. Existing `custom:heating-schedule-manager-card` cards remain supported by the bundled compatibility alias; new configurations should use `custom:scheduling-manager-card`.
 
 ## Create your first schedule
 
@@ -480,7 +501,12 @@ and remaining limitations.
 
 Release 1.7.0 modernizes runtime ownership, naming/translations, push-only Away updates, setup/Repairs errors, diagnostics and automated checks. See [HA standards alignment](HA_STANDARDS.md) for verification, removal/recovery instructions and remaining publication/strict-typing work. This remains a custom integration without an official quality-tier assignment.
 
-Source is under `custom_components/`, `frontend/src/`, and `tests/`. The deliverable ES module is under `dist/`; it bundles Lit and needs no runtime CDN dependencies. The npm lockfile pins development and runtime dependencies.
+Source is under `custom_components/`, `frontend/src/`, and `tests/`. The build
+copies the card into both `dist/` and the integration's `www/` directory, and
+includes its license notices in the integration. HACS installs the complete
+application from that integration directory. The module bundles Lit and needs
+no runtime CDN dependencies. The npm lockfile pins dependencies; CI checks that
+the committed HACS bundle matches the source build.
 
 Build with Node.js 20.19+ and npm:
 ```bash

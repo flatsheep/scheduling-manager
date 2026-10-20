@@ -60,7 +60,8 @@ claim of a current remote CI run.
 GitHub code-owner identity, project documentation and issue tracker URLs now
 refer to `flatsheep/scheduling-manager`. They become publicly accessible when
 the private preparation repository is made public.
-Brand assets/Core review and full strict typing are explicitly `todo`.
+An original icon is bundled under the integration's `brand/` directory.
+Core review and full strict typing remain outside the current custom release.
 See `HACS_PUBLISHING.md` for the HACS packaging/publication prerequisites.
 
 Mypy is gradual because the backend uses validated JSON dictionaries. Formatter
@@ -100,8 +101,11 @@ threshold. No crash is ignored/retried; production HA dependencies are unchanged
 1. Back up HA if schedules may be needed later.
 2. Remove Scheduling Manager through Settings → Devices & services. Unload
    stops its scheduling; it issues no device commands or target restoration.
-3. Remove its dashboard card/resource if unused, then this custom integration's
-   directory and JS files. Do not remove unrelated configuration or registry files.
+3. Its automatically registered frontend module is removed on unload. Remove
+   its dashboard card if unused, then uninstall through HACS to remove the
+   package files (or remove the directory for a manual install). Existing
+   manually registered legacy scheduler resources can be removed separately;
+   unrelated dashboard resources are never modified by the integration.
 4. `.storage/heating_schedule_manager` is deliberately retained for recovery.
    To purge it permanently, back it up, remove the integration and delete that
    specific file while HA is stopped.

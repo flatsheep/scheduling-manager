@@ -1,45 +1,51 @@
 # HACS publication preparation
 
-## Prepared locally
+## Single-download package
 
 - `manifest.json` classifies Scheduling Manager as a `service`, so its config
   entry is managed in HA's normal Integrations grid, independently of its entities.
 - `hacs.json` supplies the display name and existing HA 2026.7.0 minimum.
-- The project already has one integration under
-  `custom_components/heating_schedule_manager/`, UI setup, unload support and
-  persisted schedules. Keep this domain to preserve existing installations.
+- One integration lives under `custom_components/heating_schedule_manager/`.
+  Its `www/` directory contains the committed, prebuilt card. License notices
+  and the original `brand/icon.png` are inside the integration too, so HACS
+  downloads the complete application without needing a second frontend repo.
+- The integration serves the bundle through HA's static-path API and registers
+  its versioned URL through the supported `frontend.add_extra_js_url` API.
+  This works with storage and YAML dashboards, without editing dashboard
+  resources or configuration files. Unload removes only its own frontend URL.
+- The card registers itself in the card picker. Existing card type aliases are
+  retained; duplicate module loads do not redefine custom elements. Older
+  manual installations should remove their obsolete `/local/` scheduler
+  resource to avoid loading different old/new versions together.
+- The build verifies the card version against the Python frontend registration
+  and copies the bundle/notices into the integration. CI rebuilds the frontend
+  and checks that the committed HACS payload is up to date.
 - Removal and saved-data retention are documented in `README.md` and
   `HA_STANDARDS.md`. Unloading stops the runtime; deleting the config entry does
   not purge saved schedules or restore device targets.
 
-## Before publishing
+## Validation and public release
 
-1. Use the **contents of `scheduling_manager/`** as the repository root, so HACS
-   can find `custom_components/` and `hacs.json`. Review the public file set;
-   local installation records, private backups, HA data and development artifacts
-   are not release content.
-2. The manifest now identifies `@flatsheep` and the documentation/issues URLs
-   for `flatsheep/scheduling-manager`. Keep the preparation repository private
-   until ready; HACS distribution requires it to be public.
-3. GPL-3.0 licensing and third-party notices are included. Add project brand
-   assets and verify the GitHub description/topics before public distribution.
-4. Finish companion-card packaging. HACS Integration downloads manage the
-   integration directory, not the current ZIP's separate `/config/www/` files.
-   For a single-download application, bundle the built card inside the
-   integration, serve it through HA and implement resource registration/removal
-   that preserves unrelated dashboard resources. Verify upgrades and legacy
-   card/resource aliases. Until then, the card requires the documented manual
-   installation; `hacs.json` alone does not make that automatic.
-5. Run official hassfest and HACS validation against the final repository, plus
-   the project's relevant backend/frontend checks. Verify clean installation,
-   upgrade from the manual installation, visibility, deletion and re-addition
-   on a disposable HA configuration.
-6. Build a fresh release package from the amended source and choose consistent
-   integration/card/release versions. Existing archives predate this amendment.
-   The manual-install ZIP is not configured as a HACS `zip_release` artifact.
-7. Publish a versioned GitHub release, then verify installation through HACS as
-   a custom repository of type **Integration**. Default-catalogue submission is
-   a later, separate step.
+1. The repository root already contains `custom_components/` and `hacs.json`.
+   The manifest identifies `@flatsheep` and the project's documentation/issues
+   URLs. Private installation records, backups and HA data are excluded.
+2. Run the backend suites, browser tests, official hassfest and package checks.
+   The HACS-only install regression copies just `custom_components/` into a
+   temporary HA configuration, requests the real served JavaScript, and verifies
+   module registration, reload, removal and persisted schedule data. It needs
+   no `/config/www` files or manually registered dashboard resource.
+3. Keep the preparation repository private until the maintainer chooses to make
+   it public. HACS does not distribute private repositories. The HACS validation
+   job is intentionally skipped while private and runs automatically on pushes
+   once public; no skipped validation counts as HACS acceptance.
+4. After making it public, run HACS validation and download through HACS as a
+   custom **Integration** repository. Confirm the real end-user card-picker
+   installation and the documented upgrade from a manual install.
+5. Publish the first release as **v1.9.18**, containing integration **1.9.3** and
+   card **1.9.18**. HACS can download the default branch before releases exist.
+   The generated ZIP is a manual-install fallback, not a HACS `zip_release`.
+6. Submit for the HACS default catalogue separately if desired. A public custom
+   repository does not need default-catalogue inclusion to be downloaded.
 
 References:
 - https://www.hacs.xyz/docs/publish/start/

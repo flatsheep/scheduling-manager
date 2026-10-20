@@ -104,6 +104,43 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             await self.hass.async_block_till_done()
         self.assertIsNone(self.hass.states.get('binary_sensor.schedule_downstairs'))
 
+    async def test_hacs_only_install_serves_card_and_preserves_module_ownership(self):
+        """Only custom_components is installed: no /config/www or manual resources."""
+        from aiohttp.test_utils import TestClient, TestServer
+        from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL, add_extra_js_url
+        from custom_components.heating_schedule_manager.frontend import CARD_PATH, CARD_URL
+
+        entry = ConfigEntry(domain=DOMAIN, title='Scheduling Manager', data={}, options={}, source=SOURCE_USER,
+                            unique_id=DOMAIN, version=1, minor_version=1, discovery_keys={}, subentries_data=[])
+        await self.hass.config_entries.async_add(entry)
+        self.assertEqual(entry.state, ConfigEntryState.LOADED)
+        self.assertFalse(Path(self.tmp.name, 'www').exists())
+        modules = self.hass.data[DATA_EXTRA_MODULE_URL]
+        self.assertIn(CARD_URL, modules.urls)
+        add_extra_js_url(self.hass, '/unrelated-card.js')
+        await entry.runtime_data.set_away(True)
+
+        async with TestClient(TestServer(self.hass.http.app)) as client:
+            response = await client.get(CARD_URL)
+            self.assertEqual(response.status, 200)
+            bundle = await response.read()
+            self.assertIn(b'scheduling-manager-card', bundle)
+            self.assertIn('javascript', response.headers['Content-Type'])
+            alias = await client.get(f'/{DOMAIN}/heating-schedule-manager-card.js')
+            self.assertEqual(await alias.read(), bundle)
+
+            self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+            self.assertNotIn(CARD_URL, modules.urls)
+            self.assertIn('/unrelated-card.js', modules.urls)
+            self.assertTrue(await self.hass.config_entries.async_setup(entry.entry_id))
+            self.assertIn(CARD_URL, modules.urls)
+            self.assertTrue(entry.runtime_data.model['away'])
+            response = await client.get(CARD_PATH)
+            self.assertEqual(await response.read(), bundle)
+            await self.hass.config_entries.async_remove(entry.entry_id)
+            self.assertNotIn(CARD_URL, modules.urls)
+            self.assertIn('/unrelated-card.js', modules.urls)
+
     async def test_store_restart_and_corruption_original_preserved(self):
         manager=Manager(self.hass)
         await manager.start();await manager.set_away(True);await manager.stop()
@@ -117,6 +154,26 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         path.write_text('{}',encoding='utf-8')
         with self.assertRaises(ValueError):await Manager(self.hass).start()
         self.assertEqual(path.read_text(),'{}')
+
+    async def test_yaml_dashboard_resources_remain_unchanged(self):
+        from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL
+        from homeassistant.components.lovelace import LOVELACE_DATA
+        from custom_components.heating_schedule_manager.frontend import CARD_URL
+
+        resources = [{'url': '/other-yaml-card.js', 'type': 'module'}]
+        self.assertTrue(await async_setup_component(self.hass, 'lovelace', {
+            'lovelace': {'resource_mode': 'yaml', 'resources': resources},
+        }))
+        collection = self.hass.data[LOVELACE_DATA].resources
+        before = list(collection.async_items())
+        entry = ConfigEntry(domain=DOMAIN, title='Scheduling Manager', data={}, options={}, source=SOURCE_USER,
+                            unique_id=DOMAIN, version=1, minor_version=1, discovery_keys={}, subentries_data=[])
+        await self.hass.config_entries.async_add(entry)
+        self.assertEqual(entry.state, ConfigEntryState.LOADED)
+        self.assertIn(CARD_URL, self.hass.data[DATA_EXTRA_MODULE_URL].urls)
+        self.assertEqual(collection.async_items(), before)
+        await self.hass.config_entries.async_remove(entry.entry_id)
+        self.assertEqual(collection.async_items(), before)
 
     async def test_actual_climate_entity_temperature_api(self):
         from homeassistant.components.climate import ClimateEntity, DATA_COMPONENT

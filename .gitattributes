@@ -1,2 +1,3 @@
 # esbuild's bundled Lit regular expressions contain significant literal whitespace.
 dist/*.js whitespace=-blank-at-eol
+custom_components/*/www/*.js whitespace=-blank-at-eol
