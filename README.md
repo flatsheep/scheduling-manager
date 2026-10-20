@@ -1,6 +1,6 @@
 # Scheduling Manager
 
-<a href="https://www.buymeacoffee.com/flatsheep"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy me a coffee" height="60" width="217"></a>
+<a href="https://www.buymeacoffee.com/flatsheep"><img align="right" src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy me a coffee" height="40" width="145"></a>
 
 [![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=flatsheep&repository=scheduling-manager&category=integration)
 
