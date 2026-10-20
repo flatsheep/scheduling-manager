@@ -1,52 +1,76 @@
-# Scheduling Manager · card 1.9.17 / integration 1.9.2
+# Scheduling Manager
 
-A local, installable Home Assistant custom integration and dashboard card for **HA 2026.7 or later**. Verified releases: **2026.7.0**, **2026.8.1** and **2026.9.4**. See [test results](TEST_RESULTS.md) for exact coverage and limitations; compatibility with later releases is not claimed.
+**See your schedules. Shape your routines.**
 
-The Python integration runs all scheduling with the dashboard closed. The companion TypeScript/Lit card edits private section drafts and uses HA's existing authenticated connection.
+Scheduling Manager brings your Home Assistant schedules together in one clear,
+interactive view. See what happens when, which devices each schedule controls,
+and how your routines fit together—all on aligned timelines with a shared
+current-time marker.
+
+Plan your heating, hot water, lighting and other supported devices without
+piecing together separate automations. Create a schedule, add its devices,
+choose their start and end settings, then build your time bands visually. Use
+a different routine every day, group days that share the same pattern, or
+combine both.
+
+Making adjustments is just as straightforward: drag time markers, enter exact
+times, or tie an endpoint to sunrise, sunset and other solar events. Preview
+another day with a tap, organise schedules into categories, and choose which
+routines should pause when you're away.
 
 ![Scheduling Manager overview showing grouped heating and lighting schedules, weekday badges and aligned timelines](docs/images/overview.png)
 
 ## Features at a glance
 
-- **One shared timetable:** see multiple schedules together, with aligned time
-  bands and a single current-time line.
-- **Multiple entities per schedule:** combine thermostats and other supported
-  writable entities, each with its own start/target and end/setback values.
-- **Sub-schedules for individual days or groups of days:** create a different
-  sub-schedule for every day, or group days that share a routine. Give each a
-  logical name and add multiple time bands to its timetable. In view mode,
-  tap a day to peek at its sub-schedule.
-- **Fixed or solar times:** use clock times, or solar events with offsets,
-  independently at each end of a time band. In edit mode, double-tap/click a
-  blank part of the timeline to create a band, or choose **Add time band**.
-  Drag fixed-time endpoint markers or enter times manually in the popup.
-- **Categories and filters:** organise schedules and narrow the view by
-  category, HA area, floor or whether a schedule is active now.
-- **Everyday controls:** enable/disable individual schedules and preview other
-  days. Choose which schedules are included in Away mode: global **Away**
-  suspends those schedules until you turn Away off or the return date/time
-  you set is reached. Excluded schedules continue normally.
-- **Backend scheduling and recovery:** schedules run with the dashboard closed;
-  pending commands and missed transitions are handled across device outages
-  and HA restarts.
+- **Your routines, visible together.** Aligned timelines show multiple schedules
+  on the same time axis, making morning, daytime and evening routines easy to
+  compare. A single current-time line helps you see where you are in the day.
+
+- **One schedule, multiple devices.** Bring related devices together and give
+  each its own start and end settings—for example, different temperatures for
+  several rooms, or ON/OFF states for lights.
+
+- **Flexible days and meaningful names.** Create named sub-schedules for
+  individual days or groups of days. Give every day its own routine, or group
+  days that share the same time bands. Tap a day in view mode to peek at its
+  timetable.
+
+- **Visual editing, with precision when you need it.** In edit mode,
+  double-tap/click a blank part of the timeline to create a time band, or use
+  **Add time band**. Drag fixed-time markers to adjust them, or enter exact
+  times in the popup.
+
+- **Follow the clock—or the sun.** Use fixed times or solar events with offsets,
+  independently at either end of a band. Start your outside lights at sunset
+  and finish at a fixed bedtime, for example.
+
+- **Find the schedules that matter.** Group schedules into collapsible
+  categories such as Heating or Lights. Filter by category, Home Assistant
+  area, floor or whether a schedule is active now.
+
+- **Away mode that respects your choices.** Choose which schedules participate
+  in Away. Pause those routines until you return, or set a date and time for
+  automatic resumption, while excluded schedules carry on normally.
+
+- **Make a manual adjustment without fighting the timetable.** Change a device
+  setting when you need to. Scheduling Manager leaves that adjustment in place
+  until the next relevant scheduled transition.
+
+- **Keeps working when the dashboard is closed.** Scheduling runs inside Home
+  Assistant, with saved schedules and recovery handling for restarts and
+  temporarily unavailable devices.
 
 **Start here:** [Install](#install) · [Create your first schedule](#create-your-first-schedule)
 · [Solar time bands](#fixed-and-dynamic-time-band-endpoints)
 · [Categories and filters](#categories-and-display-order) · [Away](#away)
 
-### Development transparency
+## Compatibility
 
-This project was **vibe coded: developed with substantial AI assistance using
-OpenCode**. The maintainer directed the requirements, interface design and
-scheduling behaviour, while AI coding tools helped write and revise the
-backend, frontend, tests and documentation through iterative development.
+**Current versions:** card **1.9.17** / integration **1.9.2**.
 
-Verification includes automated backend tests, frontend unit and browser tests,
-Home Assistant integration validation, and use in a real HA installation.
-See [test results](TEST_RESULTS.md) for the checks performed, versions tested
-and remaining limitations.
+A local, installable Home Assistant custom integration and dashboard card for **HA 2026.7 or later**. Verified releases: **2026.7.0**, **2026.8.1** and **2026.9.4**. See [test results](TEST_RESULTS.md) for exact coverage and limitations; compatibility with later releases is not claimed.
 
-Release 1.7.0 modernizes runtime ownership, naming/translations, push-only Away updates, setup/Repairs errors, diagnostics and automated checks. See [HA standards alignment](HA_STANDARDS.md) for verification, removal/recovery instructions and remaining publication/strict-typing work. This remains a custom integration without an official quality-tier assignment.
+The Python integration runs all scheduling with the dashboard closed. The companion TypeScript/Lit card edits private section drafts and uses HA's existing authenticated connection.
 
 ## Install
 
@@ -440,7 +464,21 @@ Temperature values retain their explicit °C/°F unit. HA's `TemperatureConverte
 
 Entity-registry UUIDs track renames when available. Registry-less entities are also supported, but their ID changes need removing/re-adding the membership.
 
+## Development transparency
+
+This project was **vibe coded: developed with substantial AI assistance using
+OpenCode**. The maintainer directed the requirements, interface design and
+scheduling behaviour, while AI coding tools helped write and revise the
+backend, frontend, tests and documentation through iterative development.
+
+Verification includes automated backend tests, frontend unit and browser tests,
+Home Assistant integration validation, and use in a real HA installation.
+See [test results](TEST_RESULTS.md) for the checks performed, versions tested
+and remaining limitations.
+
 ## Development and verification
+
+Release 1.7.0 modernizes runtime ownership, naming/translations, push-only Away updates, setup/Repairs errors, diagnostics and automated checks. See [HA standards alignment](HA_STANDARDS.md) for verification, removal/recovery instructions and remaining publication/strict-typing work. This remains a custom integration without an official quality-tier assignment.
 
 Source is under `custom_components/`, `frontend/src/`, and `tests/`. The deliverable ES module is under `dist/`; it bundles Lit and needs no runtime CDN dependencies. The npm lockfile pins development and runtime dependencies.
 
