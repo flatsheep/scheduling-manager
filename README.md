@@ -8,7 +8,7 @@
 
 Scheduling Manager brings your Home Assistant schedules together in one clear,
 interactive view. See what happens when, which devices each schedule controls,
-and how your routines fit together—all on aligned timelines with a shared
+and how your routines fit together, all on aligned timelines with a shared
 current-time marker.
 
 Plan your heating, hot water, lighting and other supported devices without
@@ -31,7 +31,7 @@ routines should pause when you're away.
   compare. A single current-time line helps you see where you are in the day.
 
 - **One schedule, multiple devices.** Bring related devices together and give
-  each its own start and end settings—for example, different temperatures for
+  each its own start and end settings, such as different temperatures for
   several rooms, or ON/OFF states for lights.
 
 - **Flexible days and meaningful names.** Create named sub-schedules for
@@ -44,7 +44,7 @@ routines should pause when you're away.
   **Add time band**. Drag fixed-time markers to adjust them, or enter exact
   times in the popup.
 
-- **Follow the clock—or the sun.** Use fixed times or solar events with offsets,
+- **Follow the clock or the sun.** Use fixed times or solar events with offsets,
   independently at either end of a band. Start your outside lights at sunset
   and finish at a fixed bedtime, for example.
 
@@ -81,7 +81,7 @@ The Python integration runs all scheduling with the dashboard closed. The compan
 ### Install with HACS
 
 **One download installs both the scheduler and its matching dashboard card.**
-The integration loads the card automatically—you don't need to copy JavaScript
+The integration loads the card automatically, so you don't need to copy JavaScript
 files, add a dashboard resource or write YAML.
 
 **Availability:** install from this public repository using HACS's **Custom
@@ -216,7 +216,7 @@ setback is shared across its schedules; its orange target is specific to each
 schedule.
 
 For other supported entities, the same positions hold start/end states or
-values—for example **ON → light → OFF**. The small trash control removes an
+values, for example **ON → light → OFF**. The small trash control removes an
 entity from the draft; it takes effect only when you save.
 
 ### 3. Group days into named sub-schedules
@@ -289,7 +289,7 @@ a band already in progress. Manual device adjustments remain until the next
 applicable transition. **Enable/Disable** and **Away** are explicit controls
 with their own immediate behaviour, described below.
 
-## Temperature behaviour — important
+## Temperature behaviour (important)
 
 - **Every applicable climate endpoint issues a temperature command**, even when the last scheduler command had the same value. Starts use each membership's orange target; ends use that entity's blue shared setback.
 - The **last executed command wins** for an entity that appears in several sections. The card's dashed band is a timetable, not continuous ownership of the thermostat. A section can issue setback while another section's band remains active.
@@ -331,7 +331,7 @@ Groups containing read-only entities, climate devices or this manager's control 
 In view mode, each section has a **grey Disable** button while enabled and a **green Enable** button while disabled. These controls are immediate, administrator-only actions whose state is persisted and shared across clients.
 
 - **Disable** immediately applies climate setback, leaves non-climate states unchanged, cancels that section's pending state work and suspends future transitions. Another section can still command a shared entity; last command wins.
-- **Enable** applies climate targets and non-climate start-states if a band is active. Outside a band—including No Schedule—it applies climate setback and leaves non-climate entities unchanged. Future transitions resume without replaying historical state endpoints.
+- **Enable** applies climate targets and non-climate start-states if a band is active. Outside a band (including No Schedule), it applies climate setback and leaves non-climate entities unchanged. Future transitions resume without replaying historical state endpoints.
 
 Enable/Disable skips already-correct thermostat targets, including a fresh check at delivery. The card acknowledges the durably saved flag before necessary serialized background device updates, with **Updating devices…** feedback. Disable does not replay its own overdue starts before applying setback. Storage failure leaves the saved flag unchanged; pending needed work survives restart. Regular timed endpoints retain their usual command semantics.
 - Away suspends normal transitions in **Away included** sections. Entering applies climate setbacks where needed; excluded sections operate normally.
@@ -344,7 +344,7 @@ The automatic **No Schedule** display still sends nothing; pressing Enable is an
 
 The header and Away switch control the same persisted global flag. Green means active. The section editor's **Away included / Away excluded** toggle is committed on Save; existing sections default to included. Participating view timelines show **Away**, while excluded sections retain their ordinary timeline and transitions.
 
-Pressing **Away** opens a popup: **Now — Until I turn it off** or **Until… — Return automatically**. Both start Away immediately. Until requests a date/time in **HA's timezone**, not the phone/PC timezone. Enable Away commits; Cancel sends no write. While active, the popup can update the deadline, make Away indefinite or **Turn Away off**. The timed return appears beside the header button.
+Pressing **Away** opens a popup: **Now** (until I turn it off) or **Until…** (return automatically). Both start Away immediately. Until requests a date/time in **HA's timezone**, not the phone/PC timezone. Enable Away commits; Cancel sends no write. While active, the popup can update the deadline, make Away indefinite or **Turn Away off**. The timed return appears beside the header button.
 
 The optional `away_until` timestamp is stored in UTC, retaining schema/storage version 1, and uses the backend's one-shot timer. It survives dashboard closure and restarts. If it expired while HA was offline, startup disables Away and coalesces normal progress after the cutover without replaying stale setbacks or state starts. Manual off clears the timer; changing only the deadline preserves history and issues no device action. External switch on starts indefinite Away when off and preserves an existing timer when already on.
 
@@ -426,7 +426,7 @@ leaving **Select all** selected does not narrow that dimension.
 
 Press **Apply** to change your view or **Cancel** to leave it alone. A green
 Filter button and red **✕** indicate applied filters; use **✕** to clear them.
-Filtering hides rows locally—it does not disable schedules or change device
+Filtering hides rows locally. It does not disable schedules or change device
 settings.
 
 **Active now** is authoritative backend time-band activity: the current resolved, non-collapsed band is running, the schedule is enabled, and normal execution is not suspended by its Away participation. Merely being enabled, a thermostat reporting heating, or showing a preview does not imply activity. The predicate uses the scheduler's UTC/DST rules. Apply changes only local presentation; Cancel retains prior filters. The green Filter button and red X identify/reset applied filters. The open editor is retained when excluded. The sort feature is removed.
