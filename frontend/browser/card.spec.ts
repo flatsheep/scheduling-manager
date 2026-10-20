@@ -605,8 +605,14 @@ test('large entity lists show six entries and scroll by controls and keyboard on
     await section.getByRole('button',{name:'Scroll Schedule 1 entities down'}).click();await expect.poll(()=>list.evaluate(node=>node.scrollTop)).toBeGreaterThan(20);
     expect((await section.boundingBox())!.height).toBeCloseTo(before.height,0);
     await section.getByRole('button',{name:'Scroll Schedule 1 entities up'}).click();await expect.poll(()=>list.evaluate(node=>node.scrollTop)).toBeLessThan(1);
-    await list.focus();await page.keyboard.press('PageDown');await expect.poll(()=>list.evaluate(node=>node.scrollTop)).toBeGreaterThan(20);
-    await list.evaluate(node=>{node.scrollTop=0;});
+    await list.focus();
+    // Wait for native keyboard scrolling to finish before resetting/resizing.
+    // Observing an intermediate offset does not mean the animation has ended.
+    await list.evaluate(node=>{node.dataset.keyboardScrollFinished='false';node.addEventListener('scrollend',()=>{node.dataset.keyboardScrollFinished='true';},{once:true});});
+    await page.keyboard.press('PageDown');await expect.poll(()=>list.evaluate(node=>node.scrollTop)).toBeGreaterThan(20);
+    await expect(list).toHaveAttribute('data-keyboard-scroll-finished','true');
+    await list.evaluate(node=>{node.scrollTo({top:0,behavior:'instant'});});
+    await expect.poll(()=>list.evaluate(node=>node.scrollTop)).toBe(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }
   expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
