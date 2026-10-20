@@ -1,5 +1,7 @@
 # Scheduling Manager
 
+[![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=flatsheep&repository=scheduling-manager&category=integration)
+
 **See your schedules. Shape your routines.**
 
 Scheduling Manager brings your Home Assistant schedules together in one clear,
@@ -90,12 +92,29 @@ repositories** option. It is not yet in HACS's default catalogue.
 4. **Restart Home Assistant.**
 5. Open **Settings → Devices & services → Add integration**, search for
    **Scheduling Manager**, and add it.
-6. Edit your dashboard, choose **Add card**, then search for and select
+6. Create a dedicated dashboard view and select **Panel (single card)** as its
+   view type. This is the recommended layout for the scheduler.
+7. Choose **Add card → By card**, then search for and select
    **Scheduling Manager**. If it is not listed yet, refresh the browser or
    reopen the companion app and try again.
-7. Choose **＋ Schedule** and start building your first routine.
+8. Choose **＋ Schedule** and start building your first routine.
 
 You can also use [this shortcut to add the repository to HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=flatsheep&repository=scheduling-manager&category=integration).
+
+### Recommended dashboard layout: Panel (single card)
+
+Give Scheduling Manager its own **Panel (single card)** view. This lets the
+card use the full available width, making the aligned timelines and device
+settings easier to see and edit together.
+
+1. Edit your dashboard and **add a new view**.
+2. Give the view a title, such as **Scheduling Manager**, and choose
+   **Panel (single card)** under **View type**. Save the view.
+3. Add the **Scheduling Manager** card as that view's single card, then save
+   and leave dashboard editing.
+
+The card uses the view's title as its heading. Panel is recommended rather
+than required; you can also use the card in other dashboard layouts.
 
 ### Updates
 
