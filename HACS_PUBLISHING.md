@@ -34,13 +34,13 @@
    temporary HA configuration, requests the real served JavaScript, and verifies
    module registration, reload, removal and persisted schedule data. It needs
    no `/config/www` files or manually registered dashboard resource.
-3. Keep the preparation repository private until the maintainer chooses to make
-   it public. HACS does not distribute private repositories. The HACS validation
-   job is intentionally skipped while private and runs automatically on pushes
-   once public; no skipped validation counts as HACS acceptance.
-4. After making it public, run HACS validation and download through HACS as a
-   custom **Integration** repository. Confirm the real end-user card-picker
-   installation and the documented upgrade from a manual install.
+3. The repository is now public, at the maintainer's request. Anonymous access
+   returns HTTP 200 and the first public HACS repository-validation job passed:
+   https://github.com/flatsheep/scheduling-manager/actions/runs/39483958924/job/118839451544
+   HACS validation runs automatically on subsequent pushes.
+4. Download through HACS as a custom **Integration** repository. Confirm the real
+   end-user card-picker installation and the documented upgrade from a manual
+   install. Repository validation is not itself an end-to-end installation test.
 5. Publish the first release as **v1.9.18**, containing integration **1.9.3** and
    card **1.9.18**. HACS can download the default branch before releases exist.
    The generated ZIP is a manual-install fallback, not a HACS `zip_release`.

@@ -16,10 +16,11 @@
 - Official hassfest: **one valid integration, zero invalid**.
 - The complete application, icon and notices are inside the integration
   directory. CI checks that rebuilding does not change the committed payload.
-- HACS's repository-validation job is skipped while the repository is private.
-  Actual HACS download and card-picker installation require a public repository
-  and remain a public-release acceptance check; these isolated tests are not a
-  claim of HACS approval or a live deployment.
+- After the maintainer made the repository public, **HACS repository validation
+  passed** in [the first public validation run](https://github.com/flatsheep/scheduling-manager/actions/runs/39483958924/job/118839451544).
+  Actual end-user HACS download and card-picker installation remain an
+  acceptance check; repository validation is not a claim of a live deployment
+  or inclusion in HACS's default catalogue.
 
 ## GitHub preparation · backend 1.9.2 / card 1.9.17
 

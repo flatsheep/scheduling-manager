@@ -80,8 +80,8 @@ The Python integration runs all scheduling with the dashboard closed. The compan
 The integration loads the card automatically—you don't need to copy JavaScript
 files, add a dashboard resource or write YAML.
 
-**Availability:** the repository is currently private. These HACS steps become
-available when it is made public; it is not yet in HACS's default catalogue.
+**Availability:** install from this public repository using HACS's **Custom
+repositories** option. It is not yet in HACS's default catalogue.
 
 1. In **HACS**, open the **⋮ menu → Custom repositories**.
 2. Add `https://github.com/flatsheep/scheduling-manager` and choose
@@ -95,7 +95,7 @@ available when it is made public; it is not yet in HACS's default catalogue.
    reopen the companion app and try again.
 7. Choose **＋ Schedule** and start building your first routine.
 
-Once public, you can also use [this shortcut to add the repository to HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=flatsheep&repository=scheduling-manager&category=integration).
+You can also use [this shortcut to add the repository to HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=flatsheep&repository=scheduling-manager&category=integration).
 
 ### Updates
 
@@ -155,7 +155,7 @@ removal instructions.
 ### Publication status
 
 The HACS package includes the integration, built card, license notices and brand
-icon. The repository is private pending public release. See
+icon. The repository is public and HACS repository validation has passed. See
 [HACS publication preparation](HACS_PUBLISHING.md) for validation and release
 status. Public custom-repository installation and inclusion in HACS's default
 catalogue are separate steps.

@@ -58,8 +58,8 @@ claim of a current remote CI run.
 ## Remaining publication/highest-tier work
 
 GitHub code-owner identity, project documentation and issue tracker URLs now
-refer to `flatsheep/scheduling-manager`. They become publicly accessible when
-the private preparation repository is made public.
+refer to the public `flatsheep/scheduling-manager` repository. HACS repository
+validation has passed; end-user installation testing is tracked separately.
 An original icon is bundled under the integration's `brand/` directory.
 Core review and full strict typing remain outside the current custom release.
 See `HACS_PUBLISHING.md` for the HACS packaging/publication prerequisites.
