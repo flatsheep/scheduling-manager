@@ -8,7 +8,7 @@
 
 Scheduling Manager brings your Home Assistant schedules together in one clear,
 interactive view. See what happens when, which devices each schedule controls,
-and how your routines fit together—all on aligned timelines with a shared
+and how your routines fit together. All on aligned timelines with a shared
 current-time marker.
 
 Plan your heating, hot water, lighting and other supported devices without
