@@ -7,9 +7,10 @@ import {allFilters,categories,categoryGroups,categoryKey,filterOptions,isFiltere
 import './timeline';
 import {predictedMinute,resolvedBand,solarEvents,solarDate,validDynamic} from './dynamic';
 import {awayUntilLabel,localDateTime} from './away';
+import {bandDisabled} from './bands';
 
 type Popup = {kind: 'name'; value: string} | {kind:'entities'; query: string; selected?: string; target?: number; setback?: number; start?:EntityState;end?:EntityState} |
-  {kind:'temperature'; key: string; target: boolean; value: number} | {kind:'state';key:string;start:boolean;value:EntityState} | {kind:'band'; band?: Band; start: string; end: string; start_dynamic?:DynamicTime;end_dynamic?:DynamicTime; reason: string} | {kind:'subs'} |
+  {kind:'temperature'; key: string; target: boolean; value: number} | {kind:'state';key:string;start:boolean;value:EntityState} | {kind:'band'; band?: Band; start: string; end: string; start_dynamic?:DynamicTime;end_dynamic?:DynamicTime; disabled?:boolean;disableMode?:'permanent'|'until';until?:string; reason: string} | {kind:'subs'} |
   {kind:'category';choice:string;name:string}|{kind:'filters';filters:ScheduleFilters}|{kind:'preview-subs';sectionId:string}|{kind:'away';mode:'now'|'until';until:string};
 
 export class SchedulingManagerCard extends LitElement {
@@ -194,7 +195,7 @@ export class SchedulingManagerCard extends LitElement {
     sub.bands.push({id:uuid(),start_minute:detail.start,end_minute:detail.end});sub.bands.sort((a,b)=>a.start_minute-b.start_minute);this.changed();
   }
   private async removeBand(band:Band):Promise<boolean> {if(await this.ask(`Delete time band ${time(band.start_minute)}–${time(band.end_minute)}? The change takes effect on Save.`)){const sub=this.draft!.section.sub_schedules[this.draft!.selected];sub.bands=sub.bands.filter(b=>b.id!==band.id);this.changed();return true;}return false;}
-  private editBand(band:Band){this.popup={kind:'band',band,start:time(band.start_minute),end:time(band.end_minute),start_dynamic:band.start_dynamic?{...band.start_dynamic}:undefined,end_dynamic:band.end_dynamic?{...band.end_dynamic}:undefined,reason:''};}
+  private editBand(band:Band){this.popup={kind:'band',band,start:time(band.start_minute),end:time(band.end_minute),start_dynamic:band.start_dynamic?{...band.start_dynamic}:undefined,end_dynamic:band.end_dynamic?{...band.end_dynamic}:undefined,disabled:bandDisabled(band),disableMode:band.disabled_until?'until':'permanent',until:band.disabled_until,reason:''};}
   private solarFor(sub?:Sub){return this.saved?.solar_times?.[solarDate(this.saved.timezone,sub&&!sub.days.includes(this.clock.day)?sub.days[0]:undefined)];}
   private async temperature(key:string,target:boolean) {
     const sectionId=this.draft?.section.id;
@@ -264,8 +265,15 @@ export class SchedulingManagerCard extends LitElement {
         if(p.start_dynamic){const minutes=resolvedBand({id:'popup',start_minute:start,end_minute:end,start_dynamic:p.start_dynamic},this.solarFor(sub));if(minutes&&end<=minutes[0])end=Math.floor(end/5)*5;}
       }
       const band:Band={id:p.band?.id??uuid(),start_minute:start,end_minute:end,...(p.start_dynamic?{start_dynamic:{...p.start_dynamic}}:{}),...(p.end_dynamic?{end_dynamic:{...p.end_dynamic}}:{})};
+      if(p.disabled){
+        band.enabled=false;
+        if(p.disableMode==='until'){
+          if(!p.until){this.error='Choose a date and time to re-enable the band.';return;}
+          band.disabled_until=p.until;
+        }
+      }
       const error=bandError(sub,start,end,p.band?.id,band);if(error){this.error=error;return;}
-      if(p.band){delete p.band.start_dynamic;delete p.band.end_dynamic;Object.assign(p.band,band);}
+      if(p.band){delete p.band.start_dynamic;delete p.band.end_dynamic;delete p.band.enabled;delete p.band.disabled_until;Object.assign(p.band,band);}
       else sub.bands.push(band);
       sub.bands.sort((a,b)=>a.start_minute-b.start_minute);this.changed();
     }
@@ -460,7 +468,11 @@ export class SchedulingManagerCard extends LitElement {
           ${dynamic?html`<label>Offset (minutes)<input aria-label=${`${label} offset minutes`} type="number" required min="-300" max="300" step="1" .value=${String(dynamic.offset)} @input=${(e:Event)=>{dynamic.offset=Number((e.target as HTMLInputElement).value);this.requestUpdate();}}></label><output class="endpoint-preview" aria-label=${`${label} resolved time`} aria-live="polite">${prediction}</output>`:nothing}
           ${changed?html`<output class="endpoint-clamp" aria-label=${`${label} band time`} aria-live="polite">Band time: ${time(minute!)}${dynamic?' *':''}</output>${matchesStart?html`<small class="endpoint-clamp">End matches start</small>`:nothing}`:nothing}
         </div>`;
-      })}</div>${p.start_dynamic||p.end_dynamic?html`<p class="band-preview-date">Times for ${previewDate}</p>`:nothing}<p class="band-help">Five-minute fixed times. End 23:59 represents the following midnight.</p>`:nothing}
+      })}</div>${p.start_dynamic||p.end_dynamic?html`<p class="band-preview-date">Times for ${previewDate}</p>`:nothing}<p class="band-help">Five-minute steps. End 23:59 means midnight.</p>
+      <label>Band status<select aria-label="Band status" .value=${p.disabled?'disabled':'enabled'} @change=${(e:Event)=>{p.disabled=(e.target as HTMLSelectElement).value==='disabled';this.requestUpdate();}}><option value="enabled">Enabled</option><option value="disabled">Disabled</option></select></label>
+      ${p.disabled?html`<label>Disable for<select aria-label="Disable for" .value=${p.disableMode??'permanent'} @change=${(e:Event)=>{p.disableMode=(e.target as HTMLSelectElement).value as 'permanent'|'until';this.requestUpdate();}}><option value="permanent">Permanent</option><option value="until">Until…</option></select></label>
+      ${p.disableMode==='until'?html`<label>Re-enable date and time<input aria-label="Re-enable date and time" type="datetime-local" .value=${p.until?(p.until.includes('+')||p.until.endsWith('Z')?localDateTime(this.saved!.timezone,new Date(p.until)):p.until):''} min=${localDateTime(this.saved!.timezone)} @input=${(e:Event)=>{p.until=(e.target as HTMLInputElement).value;}}></label>`:nothing}`:nothing}
+      <p>Disabled bands are skipped. Enabling an active band runs its start settings. Apply, then Save.</p>`:nothing}
       ${p.kind==='subs'?html`<div class="choices">${this.draft!.section.sub_schedules.map((sub,i)=>html`<button type="button" class=${i===this.draft!.selected?'selected':''} @click=${()=>{this.draft!.selected=i;this.changed();this.popup=undefined;}}>${this.subLabel(sub,i)}: ${sub.days.map(d=>days[d]).join(', ')||'No days yet'}</button>`)}</div>`:nothing}
       ${p.kind==='category'?html`<label>Category<select aria-label="Category" .value=${p.choice} @change=${(e:Event)=>{this.popup={...p,choice:(e.target as HTMLSelectElement).value};}}><option value="none" ?selected=${p.choice==='none'}>Unassigned</option>${categories([...this.saved!.model.schedules,this.draft!.section]).map(name=>html`<option value=${`category:${name}`} ?selected=${p.choice===`category:${name}`}>${name}</option>`)}<option value="new" ?selected=${p.choice==='new'}>Create new category…</option></select></label>${p.choice==='new'?html`<label>New category<input aria-label="New category" required .value=${p.name} @input=${(e:Event)=>{p.name=(e.target as HTMLInputElement).value;}}></label>`:nothing}`:nothing}
       ${p.kind==='filters'?this.filterFields(p):nothing}

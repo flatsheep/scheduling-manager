@@ -18,7 +18,8 @@ from homeassistant.util import dt as dt_util
 from .capabilities import read_capabilities, cache_valid
 from .actions import state_action
 from .const import DOMAIN, SIGNAL, VERSION
-from .events import compile_events, section_active
+from .events import band_active, compile_events, section_active
+from .bands import band_disabled
 from .dynamic import SOLAR_EVENTS, SolarTimes
 from .storage import inspect_store
 from .validation import Invalid, away_time, identifier, require, temperature, validate
@@ -236,6 +237,13 @@ class Manager:
             when = now
         if deadline := self.model.get("away_until"):
             when = min(when, max(now, away_time(deadline)))
+        for section in self.model["schedules"]:
+            for sub in section["sub_schedules"]:
+                for band in sub["bands"]:
+                    if not band.get("enabled", True) and band.get("disabled_until"):
+                        expiry = away_time(band["disabled_until"])
+                        if expiry > now:
+                            when = min(when, expiry)
         if self.storage_error and when <= now:
             when = now + timedelta(seconds=60)
         token = self.generation
@@ -445,6 +453,22 @@ class Manager:
                 require(type(section.get("enabled", current_enabled)) is bool, "section.enabled", "Expected boolean")
                 require(section.get("enabled", current_enabled) == current_enabled, "section.enabled", "Use the Enable/Disable control to change this state")
                 section = deepcopy({**section, "enabled": current_enabled})
+                old_bands = {b["id"]: b for s in (model["schedules"][index]["sub_schedules"] if index is not None else []) for b in s["bands"]}
+                require(isinstance(section.get("sub_schedules"), list), "section.sub_schedules", "Invalid sub-schedules")
+                for sub in section.get("sub_schedules", []):
+                    if not isinstance(sub, dict):
+                        continue
+                    require(isinstance(sub.get("bands"), list), "section.bands", "Invalid bands")
+                    for band in sub.get("bands", []):
+                        if not isinstance(band, dict) or band.get("disabled_until") is None:
+                            continue
+                        identifier(band.get("id"), "band.id")
+                        old_deadline = old_bands.get(band.get("id"), {}).get("disabled_until")
+                        if band["disabled_until"] != old_deadline:
+                            try:
+                                band["disabled_until"] = away_time(band["disabled_until"], self.hass.config.time_zone, dt_util.utcnow()).isoformat()
+                            except Invalid as err:
+                                raise Invalid("band.disabled_until", str(err)) from None
                 require(isinstance(section.get("entities"), list) and all(isinstance(m, dict) and isinstance(m.get("entity_key"), str) for m in section["entities"]), "section.entities", "Invalid memberships")
                 if index is not None:
                     prior = {m["entity_key"]: m for m in model["schedules"][index]["entities"]}
@@ -476,13 +500,25 @@ class Manager:
             candidate["capabilities"] = cache_valid(current_capabilities, candidate["capabilities"])
             model = candidate["model"]
             now = dt_util.utcnow()
+            previous_cursor = dt_util.parse_datetime(self.snapshot["runtime"]["cursor"])
+            resume_band = None
+            if operation == "upsert" and index is not None:
+                old_bands = {b["id"]: b for sub in self.model["schedules"][index]["sub_schedules"] for b in sub["bands"]}
+                saved_section = model["schedules"][index]
+                if saved_section.get("enabled", True) and not away_for(model, saved_section):
+                    resume_band = next((band for sub in saved_section["sub_schedules"] for band in sub["bands"]
+                                        if band.get("enabled", True) and band["id"] in old_bands
+                                        and (band_disabled(old_bands[band["id"]], now) or (
+                                            not old_bands[band["id"]].get("enabled", True)
+                                            and old_bands[band["id"]].get("disabled_until")
+                                            and previous_cursor < away_time(old_bands[band["id"]]["disabled_until"]) <= now))
+                                        and band_active(sub, band, self.hass.config.time_zone, now, self.solar)), None)
             execution_changed = operation == "delete" or index is None
             if not execution_changed:
                 old_section = self.model["schedules"][index]
                 new_section = model["schedules"][index]
                 execution_changed = execution_section(old_section) != execution_section(new_section) or any(self.model["entity_settings"].get(member["entity_key"]) != model["entity_settings"].get(member["entity_key"]) for member in new_section["entities"])
             model["revision"] += 1
-            previous_cursor = dt_util.parse_datetime(self.snapshot["runtime"]["cursor"])
             at_cutover = execution_changed and previous_cursor < now and bool(compile_events(model, self.hass.config.time_zone, now - timedelta(microseconds=1), now, self.solar))
             candidate["runtime"]["cursor"] = ((now - timedelta(microseconds=1) if at_cutover else max(now, previous_cursor)) if execution_changed else previous_cursor).isoformat()
             # Deleted/replaced source records may not control Away exit or retry.
@@ -513,6 +549,21 @@ class Manager:
                     if not old or newly_included or old["setback"] != model["entity_settings"][key]["setback"]:
                         self._desired(candidate, key, model["entity_settings"][key]["setback"], "away", only_if_changed=True)
                         candidate["runtime"]["errors"].pop(key, None)
+            if resume_band is not None and index is not None:
+                # Enabling through the draft commits the start with the new
+                # settings. An exact-boundary scheduled start handles itself.
+                scheduled_start = at_cutover and any(
+                    event.section["id"] == section_id and f":{resume_band['id']}:start:" in event.occurrence
+                    for event in compile_events(model, self.hass.config.time_zone, now - timedelta(microseconds=1), now, self.solar)
+                )
+                if not scheduled_start:
+                    for member in model["schedules"][index]["entities"]:
+                        key = member["entity_key"]
+                        value = member_value(model, member, "start")
+                        unit = member_unit(member, "start")
+                        self._normal(candidate, key, value, section_id, control="band_enable", band_id=resume_band["id"],
+                                     **({"state_unit": unit} if unit is not None else {}))
+                        self._desired(candidate, key, value, section_id, unit)
             await self._persist(candidate)
             self.generation += 1
             self._arm()
@@ -523,6 +574,52 @@ class Manager:
                 except Exception:
                     _LOGGER.exception("Cutover endpoint journal failed")
             if execution_changed:
+                await self._dispatch_committed()
+            return self.public()
+
+    async def enable_band(self, expected_revision, section_id, band_id, defer_dispatch=False):
+        """Enable a saved band, applying start settings only if it is active now."""
+        async with self.lock:
+            require(not self.closed, "manager", "Integration unloaded")
+            await self._expire_away(dt_util.utcnow())
+            identifier(section_id, "section_id")
+            identifier(band_id, "band_id")
+            require(type(expected_revision) is int and expected_revision == self.model["revision"], "revision", "Conflict: reload saved state; your unsaved changes are retained")
+            section = next((s for s in self.model["schedules"] if s["id"] == section_id), None)
+            if section is None:
+                raise Invalid("section_id", "Unknown section")
+            band = next((b for sub in section["sub_schedules"] for b in sub["bands"] if b["id"] == band_id), None)
+            if band is None:
+                raise Invalid("band_id", "Unknown band")
+            if band.get("enabled", True):
+                return self.public()
+            now = dt_util.utcnow()
+            was_disabled = band_disabled(band, now)
+            # Finish old-model progress before enabling. An endpoint at this
+            # boundary is not replayed by the newly enabled band.
+            await self._advance(now)
+            candidate = deepcopy(self.snapshot)
+            section = next(s for s in candidate["model"]["schedules"] if s["id"] == section_id)
+            sub, band = next((sub, b) for sub in section["sub_schedules"] for b in sub["bands"] if b["id"] == band_id)
+            band.pop("enabled", None)
+            band.pop("disabled_until", None)
+            candidate["model"]["revision"] += 1
+            if (was_disabled and section.get("enabled", True) and not away_for(candidate["model"], section)
+                    and band_active(sub, band, self.hass.config.time_zone, now, self.solar)):
+                for member in section["entities"]:
+                    key = member["entity_key"]
+                    value = member_value(candidate["model"], member, "start")
+                    unit = member_unit(member, "start")
+                    self._normal(candidate, key, value, section_id, control="band_enable", band_id=band_id,
+                                 **({"state_unit": unit} if unit is not None else {}))
+                    self._desired(candidate, key, value, section_id, unit)
+            await self._persist(candidate)
+            self.generation += 1
+            self._arm()
+            self._notify()
+            if defer_dispatch:
+                self._queue_dispatch()
+            else:
                 await self._dispatch_committed()
             return self.public()
 

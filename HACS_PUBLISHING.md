@@ -44,9 +44,10 @@
 4. Download through HACS as a custom **Integration** repository. Confirm the real
    end-user card-picker installation and the documented upgrade from a manual
    install. Repository validation is not itself an end-to-end installation test.
-5. Publish the first release as **v1.9.19**, containing integration **1.9.4** and
-   card **1.9.19**. HACS can download the default branch before releases exist.
-   The generated ZIP is a manual-install fallback, not a HACS `zip_release`.
+5. Release **v1.10.0** contains integration and card **1.10.0**, including
+   individual time-band enable/disable controls. The first public release was
+   **v1.9.19** (integration **1.9.4**, card **1.9.19**). The generated ZIP is a
+   manual-install fallback, not a HACS `zip_release`.
 6. Submit for the HACS default catalogue separately if desired. A public custom
    repository does not need default-catalogue inclusion to be downloaded.
 
@@ -54,5 +55,6 @@ References:
 - https://www.hacs.xyz/docs/publish/start/
 - https://www.hacs.xyz/docs/publish/integration/
 
-The initial GitHub upload is preparation, not a HACS listing or a published
-release. Check the repository's Releases and Actions pages for current status.
+Public releases and HACS custom-repository installation are available. Inclusion
+in HACS's default catalogue is a separate submission. Check the repository's
+Releases and Actions pages for current status.

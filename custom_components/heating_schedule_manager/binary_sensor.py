@@ -53,6 +53,8 @@ def section_attributes(manager: Manager, section: dict[str, Any], activity: dict
                         "end_minute": band["end_minute"],
                         "start_dynamic": deepcopy(band.get("start_dynamic")),
                         "end_dynamic": deepcopy(band.get("end_dynamic")),
+                        "enabled": band.get("enabled", True),
+                        "disabled_until": band.get("disabled_until"),
                     }
                     for band in sub["bands"]
                 ],

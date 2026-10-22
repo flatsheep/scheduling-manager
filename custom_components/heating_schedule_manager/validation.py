@@ -171,6 +171,16 @@ def validate(model, capabilities):
                 identifier(band.get("id"), sp + ".band.id")
                 require(band["id"] not in seen, sp, "Duplicate ID")
                 seen.add(band["id"])
+                bp = sp + ".band"
+                require(type(band.get("enabled", True)) is bool, bp + ".enabled", "Expected boolean")
+                if band.get("disabled_until") is not None:
+                    require(not band.get("enabled", True), bp + ".disabled_until", "A disabled-until time requires a disabled band")
+                    try:
+                        band["disabled_until"] = away_time(band["disabled_until"]).isoformat()
+                    except Invalid as err:
+                        raise Invalid(bp + ".disabled_until", str(err)) from None
+                else:
+                    band.pop("disabled_until", None)
                 start, end = band.get("start_minute"), band.get("end_minute")
                 require(type(start) is int and type(end) is int, sp, "Minutes must be integers")
                 dynamic = False

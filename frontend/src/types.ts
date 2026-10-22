@@ -4,7 +4,7 @@ export interface Setting {entity_id: string; registry_id?: string | null; setbac
 export interface Membership {entity_key: string; target?: Temperature; start_state?: EntityState; end_state?: EntityState; start_unit?: string; end_unit?: string}
 export interface DynamicTime {event: string; offset: number}
 export type SolarMinutes = Record<string, number|null>;
-export interface Band {id: string; start_minute: number; end_minute: number; start_dynamic?:DynamicTime;end_dynamic?:DynamicTime}
+export interface Band {id: string; start_minute: number; end_minute: number; start_dynamic?:DynamicTime;end_dynamic?:DynamicTime;enabled?:boolean;disabled_until?:string}
 export interface Sub {id: string; name?: string; days: number[]; bands: Band[]}
 export interface Section {id: string; name: string; category?: string|null; enabled?: boolean; away_enabled?: boolean; entities: Membership[]; sub_schedules: Sub[]}
 export interface Model {revision: number; away: boolean; away_until?:string; entity_settings: Record<string, Setting>; schedules: Section[]}

@@ -69,6 +69,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         from homeassistant.components.websocket_api.const import DOMAIN as WS
         self.assertIn(f'{DOMAIN}/save_section',self.hass.data[WS])
         self.assertIn(f'{DOMAIN}/set_section_enabled',self.hass.data[WS])
+        self.assertIn(f'{DOMAIN}/enable_band',self.hass.data[WS])
         self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
         self.assertNotIn(DOMAIN,self.hass.data)
         self.assertFalse(hasattr(entry,'runtime_data'))

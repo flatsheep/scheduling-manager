@@ -1,5 +1,34 @@
 # Verification results
 
+## Integration/card 1.10.0: individual band controls
+
+- Frontend production build, **23 unit tests** and **72 Chromium browser tests**
+  passed. Band status now uses the dropdown, Apply and Save, with no separate
+  Enable button. The band popup has shorter help text and no timezone label.
+- All **eight backend suites** passed on isolated HA **2026.8.1** and
+  **2026.10.1**, including **33 focused band cases**. Combined line/branch
+  coverage on 2026.8.1: **96.33%**.
+- Save-time tests verify active-only resumption with the newly saved settings,
+  inactive bands, schedule/Away gates, state actions, storage-failure atomicity,
+  exact start/expiry boundaries, and no duplicate start after processed expiry.
+  Browser cases verify no writes before Save, Cancel, failed/stale Save retention,
+  combined time/status edits and absence of the removed button/timezone text.
+- Verification uses isolated HA configurations and mocked devices, plus a
+  synthetic browser dashboard. Physical devices were not exercised.
+- Release-version checks passed: Ruff, configured formatting, gradual mypy,
+  official hassfest (one valid integration, zero invalid), and the HACS-only
+  bundled-card serving/lifecycle regression. All 47 manual-install ZIP entries
+  matched the reviewed source files, with the versioned 1.10.0 loader included.
+- Additional band cases cover permanent/timed disable persistence, inactive and
+  unassigned weekdays, solar/DST handling, independent schedule/Away gates,
+  downtime coalescing and durable delivery. Older schedules default to enabled
+  bands without changing storage/schema version 1.
+- The same scheduling/UI behaviour was installed in the maintainer's HA
+  **2026.10.1** instance before release version labels were applied. Configuration
+  validation passed, the integration loaded after restart, the saved model was
+  unchanged and the served card matched the tested build. Deployment verification
+  did not exercise manual physical-device actions or inspect a live dashboard.
+
 ## Card-picker startup fix · backend 1.9.4 / card 1.9.19
 
 - Reproduced the reported missing custom element with HA frontend **20260930.3**:

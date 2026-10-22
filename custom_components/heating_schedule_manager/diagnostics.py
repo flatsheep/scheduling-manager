@@ -15,6 +15,7 @@ TO_REDACT = {
     "message",
     "storage_error",
     "away_until",
+    "disabled_until",
     "start_state",
     "end_state",
     "state",

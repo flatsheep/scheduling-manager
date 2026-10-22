@@ -186,10 +186,11 @@ class StandardsTests(unittest.IsolatedAsyncioTestCase):
             (api.save, "save_section", {"expected_revision": 0, "operation": "delete", "section_id": "id", "settings": {}}, (0, "delete", "id", None, {})),
             (api.away, "set_away", {"expected_revision": 0, "away": True}, (True, 0)),
             (api.section_enabled, "set_section_enabled", {"expected_revision": 0, "section_id": "id", "enabled": False}, (0, "id", False)),
+            (api.enable_band, "enable_band", {"expected_revision": 0, "section_id": "id", "band_id": "band"}, (0, "id", "band")),
         ):
             with patch.object(config_entry.runtime_data, method, AsyncMock()) as action:
                 await handler.__wrapped__(self.hass, connection, {"id": 2, **message})
-                action.assert_awaited_once_with(*expected, **({'defer_dispatch': True} if method in ('set_away', 'set_section_enabled') else {}))
+                action.assert_awaited_once_with(*expected, **({'defer_dispatch': True} if method in ('set_away', 'set_section_enabled', 'enable_band') else {}))
             self.assertTrue(connection.send_result.call_args.args[1]["editable"])
 
     async def test_subscription_survives_unload_reload_and_registration_is_global(self):

@@ -3,6 +3,7 @@ import {repeat} from 'lit/directives/repeat.js';
 import type {Band, SolarMinutes, Sub} from './types';
 import {bandError, clampEndpoint, snap, time} from './draft';
 import {resolvedBand} from './dynamic';
+import {bandDisabled} from './bands';
 
 type Endpoint='start_minute'|'end_minute';
 type Marker={key:string;band:Band;endpoint:Endpoint};
@@ -30,12 +31,14 @@ export class HeatingTimeline extends LitElement {
     line,path {vector-effect:non-scaling-stroke} text {font:12px sans-serif;fill:currentColor}
     .marker {cursor:pointer;touch-action:pan-x pan-y;outline:none}svg.editing .marker{touch-action:none}.marker:focus path,.marker.selected path {stroke:var(--primary-text-color,#222);stroke-width:3}
     .start {fill:var(--orange,#ff861f)} .end {fill:var(--blue,#009edc)}
+    .marker.disabled path{fill:#555}.disabled-band{color:#555}.disabled-label{fill:#555;font-weight:700;paint-order:stroke;stroke:var(--card-background-color,#fff);stroke-width:3px}
     .current-label rect{fill:var(--ha-card-background,var(--card-background-color,#fff));stroke:var(--orange,#ff861f);stroke-width:2}
     .current-label text{fill:var(--orange,#ff861f);font-weight:700;font-size:16px}
     .marker-tools{display:flex;gap:6px;margin:4px 0;min-height:44px;flex-wrap:wrap}button{font:inherit;min-height:44px;padding:6px 12px;border:1px solid var(--divider-color,#777);border-radius:7px;background:var(--secondary-background-color,#eee);color:var(--primary-text-color,#222);cursor:pointer}button:focus-visible{outline:3px solid var(--primary-color,#03a9f4)}
     @media(max-width:850px){.odd{display:none}}
     svg.compact .axis-label{font-size:8px}
     .active-schedule.dimmed{opacity:.25}.ghost-preview{pointer-events:none}.ghost-connector{stroke:var(--blue,#009edc);stroke-dasharray:7 5;stroke-width:2}.ghost-marker{fill:none;stroke-width:2;stroke-dasharray:4 3}.ghost-marker.start{stroke:var(--orange,#ff861f)}.ghost-marker.end{stroke:var(--blue,#009edc)}.ghost-preview text{fill:var(--primary-text-color,#222);font-weight:700}.ghost-caption{font-size:12px}
+    .disabled-preview .ghost-marker,.disabled-preview .ghost-connector{stroke:#555}.disabled-preview .disabled-label{fill:#555}
   `;
   private emit(name: string, detail: unknown) { this.dispatchEvent(new CustomEvent(name, {detail, bubbles: true, composed: true})); }
   private position(event: MouseEvent): number {
@@ -145,9 +148,9 @@ export class HeatingTimeline extends LitElement {
     return html`<svg class=${`${this.edit?'editing ':''}${this.canvasWidth<760?'compact':''}`} viewBox=${`0 0 ${this.canvasWidth} 150`} aria-label="Daily schedule, 00:00 to end of day midnight" @dblclick=${this.doubleClick} @contextmenu=${(e:Event)=>e.preventDefault()} @pointerdown=${(e:PointerEvent)=>this.down(e)} @pointermove=${this.move} @pointerup=${this.up} @pointercancel=${this.cancel} @pointerleave=${()=>{if(!this.gesture?.band)this.cancel();}}>
       <line class="axis" x1="40" y1="108" x2=${this.canvasWidth-40} y2="108" stroke="currentColor" stroke-width="3"/>
       ${Array.from({length:25},(_,hour)=>svg`<line x1=${x(hour*60)} y1="100" x2=${x(hour*60)} y2="117" stroke="currentColor"/><text class=${`axis-label ${hour%2?'odd':''}`} x=${x(hour*60)} y="141" text-anchor="middle">${time(hour*60)}</text>`)}
-      ${unavailable.map((band,index)=>svg`<text class="unavailable-band" x="40" y=${18+index*14} role=${this.edit?'button':'img'} tabindex=${this.edit?'0':'-1'} aria-label=${this.edit?'Edit unavailable dynamic time band':'Solar event unavailable'} @click=${()=>{if(this.edit)this.emit('band-edit',band);}} @keydown=${(e:KeyboardEvent)=>{if(this.edit&&e.key==='Enter'){this.emit('band-edit',band);e.preventDefault();}}}>Solar event unavailable *</text>`)}
+      ${unavailable.map((band,index)=>svg`<text class=${`unavailable-band ${bandDisabled(band)?'disabled-label':''}`} x="40" y=${18+index*14} role=${this.edit?'button':'img'} tabindex=${this.edit?'0':'-1'} aria-label=${this.edit?'Edit unavailable dynamic time band':'Solar event unavailable'} @click=${()=>{if(this.edit)this.emit('band-edit',band);}} @keydown=${(e:KeyboardEvent)=>{if(this.edit&&e.key==='Enter'){this.emit('band-edit',band);e.preventDefault();}}}>${bandDisabled(band)?'Disabled · ':''}Solar event unavailable *</text>`)}
       <g class=${`active-schedule ${this.previewSub?'dimmed':''}`}>
-      ${this.sub.bands.map(b=>{const minutes=resolvedBand(b,this.solarMinutes);return minutes?svg`<g><rect class="band-hit" x=${x(minutes[0])+14} y="30" width=${Math.max(0,x(minutes[1])-x(minutes[0])-28)} height="78" fill="transparent" @pointerdown=${(e:PointerEvent)=>{if(this.edit)this.down(e,b);}}/><line x1=${x(minutes[0])} y1="78" x2=${x(minutes[1])} y2="78" stroke="currentColor" stroke-dasharray="6 5" pointer-events="none"/></g>`:nothing;})}
+      ${this.sub.bands.map(b=>{const minutes=resolvedBand(b,this.solarMinutes);return minutes?svg`<g class=${bandDisabled(b)?'disabled-band':''}><rect class="band-hit" x=${x(minutes[0])+14} y="30" width=${Math.max(0,x(minutes[1])-x(minutes[0])-28)} height="78" fill="transparent" @pointerdown=${(e:PointerEvent)=>{if(this.edit)this.down(e,b);}}/><line x1=${x(minutes[0])} y1="78" x2=${x(minutes[1])} y2="78" stroke="currentColor" stroke-dasharray="6 5" pointer-events="none"/>${bandDisabled(b)?svg`<text class="disabled-label" x=${x((minutes[0]+minutes[1])/2)} y="24" text-anchor="middle">Disabled</text>`:nothing}</g>`:nothing;})}
       ${repeat(markers,marker=>marker.key,({key,band:b,endpoint})=>{
           const start = endpoint==='start_minute'; const minutes=resolvedBand(b,this.solarMinutes)!;const minute=minutes[start?0:1],dynamic=start?b.start_dynamic:b.end_dynamic,label=`${time(minute)}${dynamic?' *':''}`;
           const touching=this.sub.bands.some(other=>other.id!==b.id&&resolvedBand(other,this.solarMinutes)?.[start?1:0]===minute);
@@ -155,7 +158,7 @@ export class HeatingTimeline extends LitElement {
           const compact=minutes[1]-minutes[0]<15;
           const top=!start&&compact?66:36;const bottom=!start&&compact?104:88;
           const center=x(minute)+offset;const labelY=(top+bottom)/2;
-          return svg`<g data-marker=${key} class="marker ${start?'start':'end'} ${key===this.activeMarker?'selected':''}" role="button" tabindex="0" aria-pressed=${key===this.activeMarker} aria-label=${`${start?'Target start':'Setback end'} ${time(minute)}${minute===1440?' End of day / midnight':''}. ${this.edit?'Enter edits, Delete removes band, arrows adjust five minutes.':'Select to bring forward. Tab selects overlapping markers.'}`}
+          return svg`<g data-marker=${key} class="marker ${start?'start':'end'} ${bandDisabled(b)?'disabled':''} ${key===this.activeMarker?'selected':''}" role="button" tabindex="0" aria-pressed=${key===this.activeMarker} aria-label=${`${bandDisabled(b)?'Disabled. ':''}${start?'Target start':'Setback end'} ${time(minute)}${minute===1440?' End of day / midnight':''}. ${this.edit?'Enter edits, Delete removes band, arrows adjust five minutes.':'Select to bring forward. Tab selects overlapping markers.'}`}
             @pointerdown=${(e:PointerEvent)=>this.down(e,b,endpoint)}
             @focus=${()=>{if(this.activeMarker!==key)this.promote(key,true);}}
             @keydown=${(e:KeyboardEvent)=>{if(!this.edit){if(e.key==='Enter'||e.key===' '){this.promote(key);e.preventDefault();}return;}if(e.key==='Enter'){this.emit('band-edit',b);e.preventDefault();}if(e.key==='Delete'){this.emit('band-delete',b);e.preventDefault();}if(['ArrowLeft','ArrowRight'].includes(e.key)){if(!(endpoint==='start_minute'?b.start_dynamic:b.end_dynamic)){b[endpoint]=clampEndpoint(this.sub,b,endpoint,minute+(e.key==='ArrowLeft'?-5:5),this.solarMinutes);this.emit('band-change',{});this.requestUpdate();}e.preventDefault();}}}>
@@ -166,7 +169,7 @@ export class HeatingTimeline extends LitElement {
         })}
       </g>
       ${this.showCurrentTime?svg`<line class="current-line" x1=${x(this.minute)} y1="31" x2=${x(this.minute)} y2="149" stroke="var(--orange,#ff861f)" stroke-width="3.5" pointer-events="none"/>`:nothing}
-      ${this.previewSub?svg`<g class="ghost-preview" role="img" aria-label=${`Preview ${this.previewDay} sub-schedule`}>${this.previewSub.bands.map(band=>{const minutes=resolvedBand(band,this.previewSolarMinutes);return minutes?svg`<line class="ghost-connector" x1=${x(minutes[0])} y1="68" x2=${x(minutes[1])} y2="68"/>${(['start_minute','end_minute'] as const).map(endpoint=>{const start=endpoint==='start_minute',minute=minutes[start?0:1],center=x(minute),dynamic=start?band.start_dynamic:band.end_dynamic;return svg`<g class="ghost-endpoint"><path class=${`ghost-marker ${start?'start':'end'}`} d=${`M ${center} 108 L ${center-9} 82 L ${center-9} 30 L ${center+9} 30 L ${center+9} 82 Z`}/><text x=${center} y="56" text-anchor="middle" dominant-baseline="central" transform=${`rotate(-90 ${center} 56)`}>${time(minute)}${dynamic?' *':''}</text></g>`;})}`:nothing;})}</g>`:nothing}
+      ${this.previewSub?svg`<g class="ghost-preview" role="img" aria-label=${`Preview ${this.previewDay} sub-schedule`}>${this.previewSub.bands.map(band=>{const minutes=resolvedBand(band,this.previewSolarMinutes);return minutes?svg`<g class=${bandDisabled(band)?'disabled-preview':''}><line class="ghost-connector" x1=${x(minutes[0])} y1="68" x2=${x(minutes[1])} y2="68"/>${bandDisabled(band)?svg`<text class="disabled-label" x=${x((minutes[0]+minutes[1])/2)} y="24" text-anchor="middle">Disabled</text>`:nothing}${(['start_minute','end_minute'] as const).map(endpoint=>{const start=endpoint==='start_minute',minute=minutes[start?0:1],center=x(minute),dynamic=start?band.start_dynamic:band.end_dynamic;return svg`<g class="ghost-endpoint"><path class=${`ghost-marker ${start?'start':'end'}`} d=${`M ${center} 108 L ${center-9} 82 L ${center-9} 30 L ${center+9} 30 L ${center+9} 82 Z`}/><text x=${center} y="56" text-anchor="middle" dominant-baseline="central" transform=${`rotate(-90 ${center} 56)`}>${time(minute)}${dynamic?' *':''}</text></g>`;})}</g>`:nothing;})}</g>`:nothing}
       ${this.showCurrentTime?svg`<g class="current-label" role="img" aria-label=${`Current time ${time(this.minute)}`} pointer-events="none">
         <rect x=${x(this.minute)-32} y="1" width="64" height="30" rx="8"/>
         <text x=${x(this.minute)} y="22" text-anchor="middle">${time(this.minute)}</text>

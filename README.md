@@ -39,6 +39,11 @@ routines should pause when you're away.
   days that share the same time bands. Tap a day in view mode to peek at its
   timetable.
 
+- **Pause a band without changing the whole schedule.** Disable individual time
+  bands permanently or until a chosen date and time. They stay visible in dark
+  grey. Re-enabling a band during its active time applies its start settings,
+  whether you enable it manually or let the timed disable expire.
+
 - **Visual editing, with precision when you need it.** In edit mode,
   double-tap/click a blank part of the timeline to create a time band, or use
   **Add time band**. Drag fixed-time markers to adjust them, or enter exact
@@ -66,13 +71,14 @@ routines should pause when you're away.
 
 **Start here:** [Install](#install) · [Create your first schedule](#create-your-first-schedule)
 · [Solar time bands](#fixed-and-dynamic-time-band-endpoints)
+· [Disable individual bands](#disable-an-individual-time-band)
 · [Categories and filters](#categories-and-display-order) · [Away](#away)
 
 ## Compatibility
 
-**Current versions:** card **1.9.19** / integration **1.9.4**.
+**Current versions:** card **1.10.0** / integration **1.10.0**.
 
-A local, installable Home Assistant custom integration and dashboard card for **HA 2026.7 or later**. Verified releases: **2026.7.0**, **2026.8.1** and **2026.9.4**. See [test results](TEST_RESULTS.md) for exact coverage and limitations; compatibility with later releases is not claimed.
+A local, installable Home Assistant custom integration and dashboard card for **HA 2026.7 or later**. Tested releases: **2026.7.0**, **2026.8.1**, **2026.9.4** and **2026.10.1**. See [test results](TEST_RESULTS.md) for exact coverage and limitations; compatibility with later releases is not claimed.
 
 The Python integration runs all scheduling with the dashboard closed. The companion TypeScript/Lit card edits private section drafts and uses HA's existing authenticated connection.
 
@@ -102,6 +108,22 @@ repositories** option. It is not yet in HACS's default catalogue.
 8. Choose **＋ Schedule** and start building your first routine.
 
 You can also use [this shortcut to add the repository to HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=flatsheep&repository=scheduling-manager&category=integration).
+
+### Install without HACS
+
+1. Download **scheduling-manager-1.10.0.zip** from the
+   [v1.10.0 release](https://github.com/flatsheep/scheduling-manager/releases/tag/v1.10.0).
+2. Extract its `custom_components/heating_schedule_manager/` folder into your
+   Home Assistant configuration's `custom_components/` directory. Create the
+   `custom_components` directory if it does not exist.
+3. **Restart Home Assistant.**
+4. Add **Scheduling Manager** under **Settings → Devices & services → Add
+   integration**, then add its card to a dashboard as described above.
+
+The ZIP includes the built card and license notices. No build tools or separate
+dashboard resource are needed. For manual updates, replace the integration folder
+with the new release's folder, restart HA and refresh your dashboard. Keep your
+existing integration and schedules.
 
 ### Recommended dashboard layout: Panel (single card)
 
@@ -140,16 +162,7 @@ the browser or reopen the app. Existing card type aliases remain supported.
 </details>
 
 <details>
-<summary>Advanced: install without HACS</summary>
-
-Copy the complete `custom_components/heating_schedule_manager/` directory
-from this repository into your HA configuration's `custom_components/`
-directory. It already includes the built card and its license notices.
-Restart HA, add the integration, then select the card as described above.
-
-For a manual-install ZIP, run `python3 tools/package.py` from the repository
-root. It creates `artifacts/scheduling-manager-1.9.19.zip`. Extract its
-`custom_components/` directory into your HA configuration directory.
+<summary>YAML-managed dashboards</summary>
 
 For a YAML-managed dashboard, the card type is:
 
@@ -264,6 +277,32 @@ the start of the next; **23:59 as an End means following midnight**.
 
 See [fixed and dynamic time bands](#fixed-and-dynamic-time-band-endpoints)
 for sunrise/sunset settings and offsets.
+
+### Disable an individual time band
+
+In schedule edit mode, open the time-band popup and set **Band status** to
+**Disabled**. Choose **Permanent** or **Until…** with a date and time in
+Home Assistant's timezone. Press **Apply**, then **Save** the schedule.
+
+- The band stays visible in dark grey with a **Disabled** label. Its start and
+  end transitions are ignored while disabled; other enabled bands keep working.
+- Disabling an active band leaves device settings unchanged. It does not apply
+  the band's end settings.
+- A timed disable survives Home Assistant restarts. At expiry, an active band
+  automatically applies its saved start settings. Outside the band's active time,
+  it simply restores future transitions. Its later end transition runs normally.
+- To restore a disabled band manually, choose **Enabled** in **Band status**,
+  then press **Apply** and **Save**. If the band is active when saved, its start
+  settings are applied. Otherwise, it waits for its next scheduled transition.
+- Enable and disable changes stay in the draft until Save. Cancel discards them.
+  Manual enabling and timed expiry respect schedule-level disable and applicable
+  Away.
+- A band belongs to its sub-schedule, so disabling it affects all weekdays in
+  that group. Its saved times still reserve their place in the editor.
+
+This is separate from the schedule-level **Enable/Disable** control. A disabled
+schedule or applicable Away mode still suspends its bands, even after a band's
+timed disable expires.
 
 ### 5. Choose a category and Away participation
 

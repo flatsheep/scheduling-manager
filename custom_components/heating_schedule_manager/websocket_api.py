@@ -178,7 +178,28 @@ async def section_enabled(hass: HomeAssistant, connection: ActiveConnection, msg
     )
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/enable_band",
+        vol.Required("expected_revision"): vol.All(int, vol.Range(min=0)),
+        vol.Required("section_id"): str,
+        vol.Required("band_id"): str,
+    }
+)
+@websocket_api.async_response
+async def enable_band(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> None:
+    """Enable a saved band immediately, resuming its start settings if active."""
+    await mutation(
+        hass,
+        connection,
+        msg,
+        lambda manager: manager.enable_band(
+            msg["expected_revision"], msg["section_id"], msg["band_id"], defer_dispatch=True
+        ),
+    )
+
+
 def register(hass: HomeAssistant) -> None:
     """Register domain handlers once in async_setup, before any entry runtime."""
-    for handler in (get, capabilities, subscribe, save, away, section_enabled):
+    for handler in (get, capabilities, subscribe, save, away, section_enabled, enable_band):
         websocket_api.async_register_command(hass, handler)

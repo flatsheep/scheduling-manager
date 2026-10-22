@@ -890,6 +890,11 @@ var c4 = e4(class extends i5 {
   }
 });
 
+// src/bands.ts
+function bandDisabled(band, now = Date.now()) {
+  return band.enabled === false && (!band.disabled_until || !/(Z|[+-]\d\d:\d\d)$/.test(band.disabled_until) || now < Date.parse(band.disabled_until));
+}
+
 // src/timeline.ts
 var HeatingTimeline = class extends i4 {
   constructor() {
@@ -911,12 +916,14 @@ var HeatingTimeline = class extends i4 {
     line,path {vector-effect:non-scaling-stroke} text {font:12px sans-serif;fill:currentColor}
     .marker {cursor:pointer;touch-action:pan-x pan-y;outline:none}svg.editing .marker{touch-action:none}.marker:focus path,.marker.selected path {stroke:var(--primary-text-color,#222);stroke-width:3}
     .start {fill:var(--orange,#ff861f)} .end {fill:var(--blue,#009edc)}
+    .marker.disabled path{fill:#555}.disabled-band{color:#555}.disabled-label{fill:#555;font-weight:700;paint-order:stroke;stroke:var(--card-background-color,#fff);stroke-width:3px}
     .current-label rect{fill:var(--ha-card-background,var(--card-background-color,#fff));stroke:var(--orange,#ff861f);stroke-width:2}
     .current-label text{fill:var(--orange,#ff861f);font-weight:700;font-size:16px}
     .marker-tools{display:flex;gap:6px;margin:4px 0;min-height:44px;flex-wrap:wrap}button{font:inherit;min-height:44px;padding:6px 12px;border:1px solid var(--divider-color,#777);border-radius:7px;background:var(--secondary-background-color,#eee);color:var(--primary-text-color,#222);cursor:pointer}button:focus-visible{outline:3px solid var(--primary-color,#03a9f4)}
     @media(max-width:850px){.odd{display:none}}
     svg.compact .axis-label{font-size:8px}
     .active-schedule.dimmed{opacity:.25}.ghost-preview{pointer-events:none}.ghost-connector{stroke:var(--blue,#009edc);stroke-dasharray:7 5;stroke-width:2}.ghost-marker{fill:none;stroke-width:2;stroke-dasharray:4 3}.ghost-marker.start{stroke:var(--orange,#ff861f)}.ghost-marker.end{stroke:var(--blue,#009edc)}.ghost-preview text{fill:var(--primary-text-color,#222);font-weight:700}.ghost-caption{font-size:12px}
+    .disabled-preview .ghost-marker,.disabled-preview .ghost-connector{stroke:#555}.disabled-preview .disabled-label{fill:#555}
   `;
   }
   emit(name, detail) {
@@ -1066,20 +1073,20 @@ var HeatingTimeline = class extends i4 {
     }}>
       <line class="axis" x1="40" y1="108" x2=${this.canvasWidth - 40} y2="108" stroke="currentColor" stroke-width="3"/>
       ${Array.from({ length: 25 }, (_2, hour) => w`<line x1=${x2(hour * 60)} y1="100" x2=${x2(hour * 60)} y2="117" stroke="currentColor"/><text class=${`axis-label ${hour % 2 ? "odd" : ""}`} x=${x2(hour * 60)} y="141" text-anchor="middle">${time(hour * 60)}</text>`)}
-      ${unavailable.map((band, index) => w`<text class="unavailable-band" x="40" y=${18 + index * 14} role=${this.edit ? "button" : "img"} tabindex=${this.edit ? "0" : "-1"} aria-label=${this.edit ? "Edit unavailable dynamic time band" : "Solar event unavailable"} @click=${() => {
+      ${unavailable.map((band, index) => w`<text class=${`unavailable-band ${bandDisabled(band) ? "disabled-label" : ""}`} x="40" y=${18 + index * 14} role=${this.edit ? "button" : "img"} tabindex=${this.edit ? "0" : "-1"} aria-label=${this.edit ? "Edit unavailable dynamic time band" : "Solar event unavailable"} @click=${() => {
       if (this.edit) this.emit("band-edit", band);
     }} @keydown=${(e5) => {
       if (this.edit && e5.key === "Enter") {
         this.emit("band-edit", band);
         e5.preventDefault();
       }
-    }}>Solar event unavailable *</text>`)}
+    }}>${bandDisabled(band) ? "Disabled \xB7 " : ""}Solar event unavailable *</text>`)}
       <g class=${`active-schedule ${this.previewSub ? "dimmed" : ""}`}>
       ${this.sub.bands.map((b3) => {
       const minutes = resolvedBand(b3, this.solarMinutes);
-      return minutes ? w`<g><rect class="band-hit" x=${x2(minutes[0]) + 14} y="30" width=${Math.max(0, x2(minutes[1]) - x2(minutes[0]) - 28)} height="78" fill="transparent" @pointerdown=${(e5) => {
+      return minutes ? w`<g class=${bandDisabled(b3) ? "disabled-band" : ""}><rect class="band-hit" x=${x2(minutes[0]) + 14} y="30" width=${Math.max(0, x2(minutes[1]) - x2(minutes[0]) - 28)} height="78" fill="transparent" @pointerdown=${(e5) => {
         if (this.edit) this.down(e5, b3);
-      }}/><line x1=${x2(minutes[0])} y1="78" x2=${x2(minutes[1])} y2="78" stroke="currentColor" stroke-dasharray="6 5" pointer-events="none"/></g>` : A;
+      }}/><line x1=${x2(minutes[0])} y1="78" x2=${x2(minutes[1])} y2="78" stroke="currentColor" stroke-dasharray="6 5" pointer-events="none"/>${bandDisabled(b3) ? w`<text class="disabled-label" x=${x2((minutes[0] + minutes[1]) / 2)} y="24" text-anchor="middle">Disabled</text>` : A}</g>` : A;
     })}
       ${c4(markers, (marker) => marker.key, ({ key, band: b3, endpoint }) => {
       const start = endpoint === "start_minute";
@@ -1092,7 +1099,7 @@ var HeatingTimeline = class extends i4 {
       const bottom = !start && compact ? 104 : 88;
       const center = x2(minute) + offset;
       const labelY = (top + bottom) / 2;
-      return w`<g data-marker=${key} class="marker ${start ? "start" : "end"} ${key === this.activeMarker ? "selected" : ""}" role="button" tabindex="0" aria-pressed=${key === this.activeMarker} aria-label=${`${start ? "Target start" : "Setback end"} ${time(minute)}${minute === 1440 ? " End of day / midnight" : ""}. ${this.edit ? "Enter edits, Delete removes band, arrows adjust five minutes." : "Select to bring forward. Tab selects overlapping markers."}`}
+      return w`<g data-marker=${key} class="marker ${start ? "start" : "end"} ${bandDisabled(b3) ? "disabled" : ""} ${key === this.activeMarker ? "selected" : ""}" role="button" tabindex="0" aria-pressed=${key === this.activeMarker} aria-label=${`${bandDisabled(b3) ? "Disabled. " : ""}${start ? "Target start" : "Setback end"} ${time(minute)}${minute === 1440 ? " End of day / midnight" : ""}. ${this.edit ? "Enter edits, Delete removes band, arrows adjust five minutes." : "Select to bring forward. Tab selects overlapping markers."}`}
             @pointerdown=${(e5) => this.down(e5, b3, endpoint)}
             @focus=${() => {
         if (this.activeMarker !== key) this.promote(key, true);
@@ -1131,10 +1138,10 @@ var HeatingTimeline = class extends i4 {
       ${this.showCurrentTime ? w`<line class="current-line" x1=${x2(this.minute)} y1="31" x2=${x2(this.minute)} y2="149" stroke="var(--orange,#ff861f)" stroke-width="3.5" pointer-events="none"/>` : A}
       ${this.previewSub ? w`<g class="ghost-preview" role="img" aria-label=${`Preview ${this.previewDay} sub-schedule`}>${this.previewSub.bands.map((band) => {
       const minutes = resolvedBand(band, this.previewSolarMinutes);
-      return minutes ? w`<line class="ghost-connector" x1=${x2(minutes[0])} y1="68" x2=${x2(minutes[1])} y2="68"/>${["start_minute", "end_minute"].map((endpoint) => {
+      return minutes ? w`<g class=${bandDisabled(band) ? "disabled-preview" : ""}><line class="ghost-connector" x1=${x2(minutes[0])} y1="68" x2=${x2(minutes[1])} y2="68"/>${bandDisabled(band) ? w`<text class="disabled-label" x=${x2((minutes[0] + minutes[1]) / 2)} y="24" text-anchor="middle">Disabled</text>` : A}${["start_minute", "end_minute"].map((endpoint) => {
         const start = endpoint === "start_minute", minute = minutes[start ? 0 : 1], center = x2(minute), dynamic = start ? band.start_dynamic : band.end_dynamic;
         return w`<g class="ghost-endpoint"><path class=${`ghost-marker ${start ? "start" : "end"}`} d=${`M ${center} 108 L ${center - 9} 82 L ${center - 9} 30 L ${center + 9} 30 L ${center + 9} 82 Z`}/><text x=${center} y="56" text-anchor="middle" dominant-baseline="central" transform=${`rotate(-90 ${center} 56)`}>${time(minute)}${dynamic ? " *" : ""}</text></g>`;
-      })}` : A;
+      })}</g>` : A;
     })}</g>` : A}
       ${this.showCurrentTime ? w`<g class="current-label" role="img" aria-label=${`Current time ${time(this.minute)}`} pointer-events="none">
         <rect x=${x2(this.minute) - 32} y="1" width="64" height="30" rx="8"/>
@@ -1529,7 +1536,7 @@ var SchedulingManagerCard = class extends i4 {
     return false;
   }
   editBand(band) {
-    this.popup = { kind: "band", band, start: time(band.start_minute), end: time(band.end_minute), start_dynamic: band.start_dynamic ? { ...band.start_dynamic } : void 0, end_dynamic: band.end_dynamic ? { ...band.end_dynamic } : void 0, reason: "" };
+    this.popup = { kind: "band", band, start: time(band.start_minute), end: time(band.end_minute), start_dynamic: band.start_dynamic ? { ...band.start_dynamic } : void 0, end_dynamic: band.end_dynamic ? { ...band.end_dynamic } : void 0, disabled: bandDisabled(band), disableMode: band.disabled_until ? "until" : "permanent", until: band.disabled_until, reason: "" };
   }
   solarFor(sub) {
     return this.saved?.solar_times?.[solarDate(this.saved.timezone, sub && !sub.days.includes(this.clock.day) ? sub.days[0] : void 0)];
@@ -1643,6 +1650,16 @@ var SchedulingManagerCard = class extends i4 {
         }
       }
       const band = { id: p4.band?.id ?? uuid(), start_minute: start, end_minute: end, ...p4.start_dynamic ? { start_dynamic: { ...p4.start_dynamic } } : {}, ...p4.end_dynamic ? { end_dynamic: { ...p4.end_dynamic } } : {} };
+      if (p4.disabled) {
+        band.enabled = false;
+        if (p4.disableMode === "until") {
+          if (!p4.until) {
+            this.error = "Choose a date and time to re-enable the band.";
+            return;
+          }
+          band.disabled_until = p4.until;
+        }
+      }
       const error = bandError(sub, start, end, p4.band?.id, band);
       if (error) {
         this.error = error;
@@ -1651,6 +1668,8 @@ var SchedulingManagerCard = class extends i4 {
       if (p4.band) {
         delete p4.band.start_dynamic;
         delete p4.band.end_dynamic;
+        delete p4.band.enabled;
+        delete p4.band.disabled_until;
         Object.assign(p4.band, band);
       } else sub.bands.push(band);
       sub.bands.sort((a3, b3) => a3.start_minute - b3.start_minute);
@@ -1963,7 +1982,19 @@ var SchedulingManagerCard = class extends i4 {
       }}></label><output class="endpoint-preview" aria-label=${`${label} resolved time`} aria-live="polite">${prediction}</output>` : A}
           ${changed ? b2`<output class="endpoint-clamp" aria-label=${`${label} band time`} aria-live="polite">Band time: ${time(minute)}${dynamic ? " *" : ""}</output>${matchesStart ? b2`<small class="endpoint-clamp">End matches start</small>` : A}` : A}
         </div>`;
-    })}</div>${p4.start_dynamic || p4.end_dynamic ? b2`<p class="band-preview-date">Times for ${previewDate}</p>` : A}<p class="band-help">Five-minute fixed times. End 23:59 represents the following midnight.</p>` : A}
+    })}</div>${p4.start_dynamic || p4.end_dynamic ? b2`<p class="band-preview-date">Times for ${previewDate}</p>` : A}<p class="band-help">Five-minute steps. End 23:59 means midnight.</p>
+      <label>Band status<select aria-label="Band status" .value=${p4.disabled ? "disabled" : "enabled"} @change=${(e5) => {
+      p4.disabled = e5.target.value === "disabled";
+      this.requestUpdate();
+    }}><option value="enabled">Enabled</option><option value="disabled">Disabled</option></select></label>
+      ${p4.disabled ? b2`<label>Disable for<select aria-label="Disable for" .value=${p4.disableMode ?? "permanent"} @change=${(e5) => {
+      p4.disableMode = e5.target.value;
+      this.requestUpdate();
+    }}><option value="permanent">Permanent</option><option value="until">Until…</option></select></label>
+      ${p4.disableMode === "until" ? b2`<label>Re-enable date and time<input aria-label="Re-enable date and time" type="datetime-local" .value=${p4.until ? p4.until.includes("+") || p4.until.endsWith("Z") ? localDateTime(this.saved.timezone, new Date(p4.until)) : p4.until : ""} min=${localDateTime(this.saved.timezone)} @input=${(e5) => {
+      p4.until = e5.target.value;
+    }}></label>` : A}` : A}
+      <p>Disabled bands are skipped. Enabling an active band runs its start settings. Apply, then Save.</p>` : A}
       ${p4.kind === "subs" ? b2`<div class="choices">${this.draft.section.sub_schedules.map((sub, i7) => b2`<button type="button" class=${i7 === this.draft.selected ? "selected" : ""} @click=${() => {
       this.draft.selected = i7;
       this.changed();

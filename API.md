@@ -73,7 +73,8 @@ An upsert section has:
     id: UUID, name?: trimmed string, days: [0..6],
     bands: [{id: UUID, start_minute: integer, end_minute: integer,
              start_dynamic?: {event: solar_event, offset: integer},
-             end_dynamic?: {event: solar_event, offset: integer}}]
+              end_dynamic?: {event: solar_event, offset: integer},
+              enabled?: boolean, disabled_until?: ISO_date_time_string}]
   }]
 }
 ```
@@ -93,6 +94,34 @@ Only this explicit section operation applies. Omitted unrelated sections are nev
 
 New sections are enabled by default. Existing sections missing `enabled` are interpreted as enabled. Section Save preserves the saved enable state; attempts to change it through Save are rejected. Use the explicit immediate action below.
 
+Bands additionally accept optional `enabled` (boolean, default `true`) and
+`disabled_until` (ISO date/time string, only valid with `enabled: false`). These
+are ordinary draft edits committed through section Save. Omitting the deadline
+disables the band permanently. New or changed deadlines must be in the future;
+local inputs use HA's timezone and the same DST-gap/fold rules as timed Away.
+Saved deadlines are canonical UTC timestamps. Unchanged expired deadlines remain
+valid when saving unrelated edits. Storage/schema version 1 is retained.
+
+The card changes band status through section Save. Re-enabling an existing
+disabled band applies the newly saved start settings if that particular band is
+active at commit time, unless schedule disable or applicable Away suspends it.
+New bands, ordinary edits to enabled bands and inactive-band enables do not
+synthesize starts. A scheduled boundary start or an already processed timed
+expiry is not duplicated. Apply and Cancel perform no configuration mutation;
+only Save commits the band-status change and journals any required start.
+
+A band is suspended when `enabled` is false and its deadline is absent or still
+in the future. Each endpoint is checked at its actual UTC occurrence, including
+downtime recovery. Expiry inside an active occurrence produces one start action
+at the deadline; expiry outside its active interval sends no command. At exactly
+the band's start, only its ordinary start runs; at its end, only its end runs.
+Expiry starts use the ordinary durable event stream and coalesce with later
+transitions during downtime recovery. Suspended bands do not count
+towards section activity. Changes clear obsolete pending work using the existing
+section-save cutover. Section disable and applicable Away mode remain independent
+gates. Read-only schedule entity band attributes include the saved `enabled` and
+`disabled_until` fields; a past deadline overrides the saved false flag.
+
 `away_enabled` defaults to true for existing/new sections and is a normal section edit committed on Save. Away-disabled sections continue ordinary transitions during global Away. Participating climate entities receive shared setback; participating state entities are suspended without state commands. Saving state memberships during Away never changes them immediately.
 
 `category` (added in 1.3.0) is a trimmed, case-sensitive name or null; an omitted/empty value defaults to unassigned. Categories are derived from saved section assignments, so there is no orphan registry to clean up. A category-only or name-only update retains runtime cursor/history and pending commands; it does not issue temperature/state commands or alter the execution definition. Filtering/sorting are frontend presentation operations and never reorder this API's saved `schedules` array.
@@ -100,6 +129,25 @@ New sections are enabled by default. Existing sections missing `enabled` are int
 Optional sub-schedule `name` is validated as a string, trimmed, and omitted when blank. Unnamed legacy records remain valid. Sub-schedule name-only updates preserve runtime/Away history and pending commands. Execution-changing saves retain unrelated overdue occurrences atomically rather than skipping them when advancing the global cursor.
 
 Success returns canonical `get` state after persistence. Physical-device failures are runtime status, not rollback of an accepted configuration. A storage failure **before** commit leaves configuration/event generations unchanged. A command acknowledgement storage failure after commit is separately reported in `storage_error`.
+
+## `heating_schedule_manager/enable_band` (administrator)
+
+Fields: `expected_revision`, `section_id` (UUID), and `band_id` (UUID).
+This immediate operation enables the saved band and removes its disabled-until
+deadline. If this particular band is active on its assigned HA-local weekday,
+it journals and delivers the saved section's start settings. Outside that band's
+active interval, no start action is sent. Enabling is permitted while the section
+is disabled or suspended by applicable Away, but those gates suppress its start
+action. An already enabled band is an idempotent no-op. There is no `fire_start`
+option.
+
+Old-model progress is advanced before the change to avoid replaying a scheduled
+start at the enable boundary. A simultaneous automatic expiry is not duplicated
+by manual Enable. Success increments the global revision, invalidates
+old callbacks and acknowledges durable state before queued device delivery, using
+the existing `applying` status. Revision conflicts retain the caller's draft.
+This programmatic immediate operation remains available, but the card's dropdown
+uses ordinary section Save instead. Cancel cannot undo this API operation.
 
 ## `heating_schedule_manager/set_away` (administrator)
 
