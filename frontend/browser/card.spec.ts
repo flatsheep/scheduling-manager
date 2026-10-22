@@ -375,7 +375,17 @@ test('quick-clear X appears beside a green filter button and clears all filter d
   await page.getByRole('button',{name:'Filter schedules'}).click();await expect(page.getByRole('checkbox',{name:'Select all categories',exact:true})).toBeChecked();expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
 });
 test('one shared time indicator spans all strips and follows synchronised scrolling',async({page})=>{
-  await page.setViewportSize({width:1920,height:1100});await expect(page.locator('.shared-time-label')).toHaveCount(1);await expect(page.locator('.shared-time-line')).toHaveCount(1);await expect(page.locator('hsm-timeline .current-label')).toHaveCount(0);
+  await page.setViewportSize({width:1920,height:1100});
+  // ResizeObserver updates each SVG before the card measures the shared line
+  // on the following animation frame. Flush both phases before sampling it.
+  await page.clock.runFor(34);
+  for(const timeline of await page.locator('hsm-timeline').all()){
+    await expect.poll(()=>timeline.locator('svg').evaluate((svg:SVGSVGElement)=>{
+      const matrix=svg.getScreenCTM()!;return Math.max(Math.abs(matrix.a-1),Math.abs(matrix.d-1));
+    })).toBeLessThan(.001);
+  }
+  await page.clock.runFor(34);
+  await expect(page.locator('.shared-time-label')).toHaveCount(1);await expect(page.locator('.shared-time-line')).toHaveCount(1);await expect(page.locator('hsm-timeline .current-label')).toHaveCount(0);
   const line=(await page.locator('.shared-time-line').boundingBox())!,sections=await page.locator('section').evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect();return{top:r.top,bottom:r.bottom};}));
   const firstAxis=(await page.locator('hsm-timeline .axis').first().boundingBox())!;expect(line.y).toBeLessThan(firstAxis.y);expect(line.y+line.height).toBeGreaterThanOrEqual(sections.at(-1)!.bottom-10);
   for(const timeline of await page.locator('hsm-timeline').all()){
