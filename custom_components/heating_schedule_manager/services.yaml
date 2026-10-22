@@ -1,0 +1,18 @@
+get_disabled:
+  fields:
+    path:
+      example: schedule_manager.schedule1.disabled
+      selector:
+        text:
+set_disabled:
+  fields:
+    path:
+      required: true
+      example: schedule_manager.schedule1.weekdays.band-on-0700-off-1000.disabled
+      selector:
+        text:
+    disabled:
+      required: true
+      example: true
+      selector:
+        boolean:

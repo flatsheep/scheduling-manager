@@ -44,6 +44,11 @@ routines should pause when you're away.
   grey. Re-enabling a band during its active time applies its start settings,
   whether you enable it manually or let the timed disable expire.
 
+- **Control schedules from your automations.** Read or change a schedule or
+  band's disabled state through native Home Assistant switches or boolean path
+  actions. A parent schedule can pause all its bands without losing their
+  individual enable/disable choices.
+
 - **Visual editing, with precision when you need it.** In edit mode,
   double-tap/click a blank part of the timeline to create a time band, or use
   **Add time band**. Drag fixed-time markers to adjust them, or enter exact
@@ -73,10 +78,11 @@ routines should pause when you're away.
 · [Solar time bands](#fixed-and-dynamic-time-band-endpoints)
 · [Disable individual bands](#disable-an-individual-time-band)
 · [Categories and filters](#categories-and-display-order) · [Away](#away)
+· [Programmatic controls](#programmatic-enabledisable-controls)
 
 ## Compatibility
 
-**Current versions:** card **1.10.0** / integration **1.10.0**.
+**Current versions:** card **1.11.0** / integration **1.11.0**.
 
 A local, installable Home Assistant custom integration and dashboard card for **HA 2026.7 or later**. Tested releases: **2026.7.0**, **2026.8.1**, **2026.9.4** and **2026.10.1**. See [test results](TEST_RESULTS.md) for exact coverage and limitations; compatibility with later releases is not claimed.
 
@@ -111,8 +117,8 @@ You can also use [this shortcut to add the repository to HACS](https://my.home-a
 
 ### Install without HACS
 
-1. Download **scheduling-manager-1.10.0.zip** from the
-   [v1.10.0 release](https://github.com/flatsheep/scheduling-manager/releases/tag/v1.10.0).
+1. Download **scheduling-manager-1.11.0.zip** from the
+   [v1.11.0 release](https://github.com/flatsheep/scheduling-manager/releases/tag/v1.11.0).
 2. Extract its `custom_components/heating_schedule_manager/` folder into your
    Home Assistant configuration's `custom_components/` directory. Create the
    `custom_components` directory if it does not exist.
@@ -408,6 +414,81 @@ target:
 ### Schedule entities
 
 Every saved schedule is exposed as a read-only `binary_sensor` with a stable UUID-based identity. Its state is `on` only while the schedule is enabled, inside a resolved time band and not suspended by Away. Creating, editing or deleting a schedule adds, updates or removes its matching entity. Its attributes expose the schedule ID, current name/category, enabled and Away state, member actions, weekday/band definitions (including solar endpoints) and the next scheduled endpoint. These attributes make the saved schedules available to ordinary Home Assistant state consumers, including compatible MCP clients; they do not provide schedule-editing controls.
+
+### Programmatic enable/disable controls
+
+Every schedule and time band also has a writable **Disabled** switch. **On means
+disabled; off means enabled.** Use ordinary `switch.turn_on` / `switch.turn_off`
+actions in automations or scripts. The switch's `path` attribute identifies its
+equivalent boolean API path. Sub-schedules have no enable/disable control.
+
+For example, a schedule named **Schedule1** initially gets a switch such as:
+
+```yaml
+action: switch.turn_on
+target:
+  entity_id: switch.schedule_manager_schedule1_disabled
+```
+
+This disables the schedule. Use `switch.turn_off` to enable it. Confirm the
+switch's current entity ID in **Settings → Devices & services → Entities**;
+entity IDs can be renamed in HA. The boolean path equivalents look like:
+
+```text
+schedule_manager.schedule1.disabled
+schedule_manager.schedule1.weekdays.band-on-0700-off-1000.disabled
+```
+
+These are API paths, not HA entity IDs. To discover the paths for your own
+schedules, call **Scheduling Manager: Get disabled state** without a path:
+
+```yaml
+action: heating_schedule_manager.get_disabled
+data: {}
+response_variable: schedule_controls
+```
+
+The discovery response's `controls` list contains all readable schedule and band
+paths. Read a single control by supplying its path:
+
+```yaml
+action: heating_schedule_manager.get_disabled
+data:
+  path: schedule_manager.schedule1.disabled
+response_variable: schedule_state
+```
+
+For example, `{{ schedule_state.disabled }}` reads its boolean value in a later
+template. Responses also include `own_disabled`, `parent_disabled` and the
+applicable `disabled_until` time. To enable a band using its boolean path:
+
+```yaml
+action: heating_schedule_manager.set_disabled
+data:
+  path: schedule_manager.schedule1.weekdays.band-on-0700-off-1000.disabled
+  disabled: false
+```
+
+- `true` disables permanently. `false` cancels any timed disable and enables the
+  schedule or band immediately. An active band applies its start settings; an
+  inactive band waits for its next transition. Schedule controls use the same
+  device-setting behaviour as the existing UI controls.
+- A disabled parent makes all its bands report `disabled: true`, without changing
+  their own flags. Re-enabling the parent preserves individually disabled bands.
+  Enabling a band while its parent is disabled clears that band's own disable,
+  but does not enable the parent or command devices.
+- Away remains separate. `suspended_by_away` reports it, and applicable Away still
+  prevents a band start even when the band is enabled.
+- Names are normalized to lowercase with underscores. Paths follow name/time
+  changes; native switch entity identities remain tied to stable internal UUIDs.
+  Duplicate names receive distinguishing UUID suffixes. Discover current paths
+  rather than guessing a suffixed path.
+- Unnamed sub-schedules use `sub_schedule_1`, etc. Solar endpoints use event and
+  offset names, such as `band-on-sunrise-plus-30-off-1000`. End `2359` means the
+  following midnight, as in the card.
+- These controls update saved configuration immediately, so an already-open card
+  draft can become stale. User-context writes require an administrator; HA's
+  internal automation/script calls without a user context are supported.
 
 ## Editing and timeline controls
 

@@ -165,6 +165,46 @@ Since backend 1.9.2, explicit Enable/Disable skips already-correct climate targe
 
 Global Away affects only sections with `away_enabled: true`. Entry queues only needed climate setback changes; included normal endpoints are suspended without repeating setbacks. Exit resumes only active participating schedules in saved order, skipping already-correct climate targets. Inactive/disabled schedules are not commanded. The card's Away API acknowledges after durable commit and delivers pending work asynchronously under the serialized lock; `applying` indicates authorized pending work still being delivered. Errors remain in runtime status. Success returns canonical state with a new revision. Repeating the flag is idempotent. Save/Cancel cannot undo the toggle; stale Saves conflict. Storage failure before commit leaves the flag unchanged.
 
+## Programmatic Disabled controls (added in 1.11.0)
+
+The integration exposes native Disabled switches for schedules and bands, and
+two HA actions through the standard action/REST/WebSocket service APIs:
+
+- `heating_schedule_manager.get_disabled`: optional `path`; response required.
+  One path returns its record. Omitting it returns `{"controls": [records...]}`.
+- `heating_schedule_manager.set_disabled`: required `path` and strict boolean
+  `disabled`; response optional. When requested, the response is the updated record.
+
+Records include `path`, `kind`, `schedule_id`, schedule name, `disabled`,
+`own_disabled`, `parent_disabled`, `disabled_until` and `suspended_by_away`.
+Band records additionally include stable `sub_schedule_id`, `band_id` and the
+sub-schedule's display name. Native switches publish the same record as state
+attributes, and map their `on` state to effective `disabled: true`.
+
+Paths have the form `schedule_manager.<schedule>.disabled` or
+`schedule_manager.<schedule>.<sub>.band-on-<start>-off-<end>.disabled`.
+Schedule/sub-schedule names are slugged to lowercase underscore-separated names.
+Collisions within a scope append `__id_<full UUID without hyphens>` to each
+colliding component, independently of ordering. Sub-schedule fallbacks use
+`sub_schedule_N`; solar endpoints use `event-plus-N` / `event-minus-N`, omitting
+the suffix for zero offset. End-of-day 1440 uses `2359`, matching the card.
+Paths change on rename/time edits, while native entity unique IDs remain stable.
+No sub-schedule-level control exists.
+
+Setting true makes an object's own disable permanent. Setting false cancels a
+band's deadline and enables it. Active bands resume start settings, respecting
+the parent's enabled flag and applicable Away. A band's effective disabled read
+is `parent_disabled OR own_disabled`; parent writes never rewrite band flags.
+Away is reported separately and is not part of this boolean.
+
+Writes use the existing serialized, revision-checked UI operations. A concurrent
+configuration change can produce a conflict rather than overwriting newer edits.
+User-context writes require an administrator; no-user HA automation contexts are
+supported. Reads filter schedules using the requesting user's entity-read access,
+as with the card API. Switches owned by this integration are excluded from the
+scheduler's writable device catalog to prevent scheduling the controls themselves.
+Handlers resolve the live config-entry manager on each call and survive reloads.
+
 ## Errors
 
 - `unauthorized`: administrator required.

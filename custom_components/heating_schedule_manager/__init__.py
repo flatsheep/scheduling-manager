@@ -13,6 +13,7 @@ from .const import DOMAIN
 from .frontend import async_setup_assets, register_card, unregister_card
 from .runtime import ScheduleConfigEntry
 from .scheduler import Manager
+from .services import async_register as async_register_services
 from .validation import Invalid
 from .websocket_api import register
 
@@ -23,6 +24,7 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Register domain APIs and bundled card routes once across entry reloads."""
     register(hass)
+    await async_register_services(hass)
     await async_setup_assets(hass)
     return True
 

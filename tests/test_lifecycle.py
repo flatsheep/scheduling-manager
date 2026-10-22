@@ -105,6 +105,146 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             await self.hass.async_block_till_done()
         self.assertIsNone(self.hass.states.get('binary_sensor.schedule_downstairs'))
 
+    async def test_disabled_switches_and_actions_follow_parent_and_band_states(self):
+        from test_backend import NOW, fixture
+
+        await async_setup_component(self.hass, 'climate', {})
+        entry = ConfigEntry(domain=DOMAIN, title='Scheduling Manager', data={}, options={}, source=SOURCE_USER,
+                            unique_id=DOMAIN, version=1, minor_version=1, discovery_keys={}, subentries_data=[])
+        await self.hass.config_entries.async_add(entry)
+        calls = []
+        async def climate(call):
+            calls.append(call.data['temperature'])
+        self.hass.services.async_register('climate', 'set_temperature', climate)
+        self.hass.states.async_set('climate.kitchen', 'heat', {'supported_features': 1, 'min_temp': 7, 'max_temp': 35, 'target_temp_step': .5, 'temperature': 20})
+        section, settings = fixture()
+        section['name'] = 'Schedule1'
+        section['sub_schedules'][0]['name'] = 'Weekdays'
+        band = section['sub_schedules'][0]['bands'][0]
+        band.update(enabled=False, disabled_until='2026-07-06T15:00Z')
+        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow', return_value=NOW.replace(hour=13)):
+            await entry.runtime_data.save_section(0, 'upsert', section['id'], section, settings)
+            await self.hass.async_block_till_done()
+            controls = [s for s in self.hass.states.async_all('switch') if s.attributes.get('path')]
+            self.assertEqual(len(controls), 2)
+            parent = next(s for s in controls if s.attributes['kind'] == 'schedule')
+            child = next(s for s in controls if s.attributes['kind'] == 'band')
+            self.assertEqual(parent.state, 'off')
+            self.assertEqual(child.state, 'on')
+            self.assertNotIn(parent.entity_id, entry.runtime_data.capabilities())
+            self.assertNotIn(child.entity_id, entry.runtime_data.capabilities())
+            await self.hass.services.async_call('switch', 'turn_on', {'entity_id': parent.entity_id}, blocking=True)
+            await self.hass.async_block_till_done()
+            calls.clear()
+            await self.hass.services.async_call('switch', 'turn_off', {'entity_id': child.entity_id}, blocking=True)
+            await self.hass.async_block_till_done()
+            self.assertEqual(calls, [])
+            state = self.hass.states.get(child.entity_id)
+            self.assertEqual(state.state, 'on')
+            self.assertFalse(state.attributes['own_disabled'])
+            self.assertTrue(state.attributes['parent_disabled'])
+            self.assertIsNone(state.attributes['disabled_until'])
+            response = await self.hass.services.async_call(DOMAIN, 'get_disabled', {'path': state.attributes['path']}, blocking=True, return_response=True)
+            self.assertIs(response['disabled'], True)
+            await self.hass.services.async_call(DOMAIN, 'set_disabled', {'path': parent.attributes['path'], 'disabled': False}, blocking=True)
+            await self.hass.async_block_till_done()
+            self.assertEqual(self.hass.states.get(child.entity_id).state, 'off')
+            self.assertEqual(calls, [21])
+
+    async def test_control_paths_rename_without_entity_identity_changes_and_delete_cleanly(self):
+        from copy import deepcopy
+        from test_backend import NOW, fixture
+
+        await async_setup_component(self.hass, 'climate', {})
+        entry = ConfigEntry(domain=DOMAIN, title='Scheduling Manager', data={}, options={}, source=SOURCE_USER,
+                            unique_id=DOMAIN, version=1, minor_version=1, discovery_keys={}, subentries_data=[])
+        await self.hass.config_entries.async_add(entry)
+        self.hass.states.async_set('climate.kitchen', 'heat', {'supported_features': 1, 'min_temp': 7, 'max_temp': 35, 'target_temp_step': .5, 'temperature': 20})
+        section, settings = fixture()
+        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow', return_value=NOW):
+            await entry.runtime_data.save_section(0, 'upsert', section['id'], section, settings)
+            await self.hass.async_block_till_done()
+            registry = er.async_get(self.hass)
+            before = {s.attributes['path']: s.entity_id for s in self.hass.states.async_all('switch') if s.attributes.get('path')}
+            unique = {eid: registry.async_get(eid).unique_id for eid in before.values()}
+            section = deepcopy(entry.runtime_data.model['schedules'][0])
+            section['name'] = 'Renamed Kitchen'
+            section['sub_schedules'][0]['name'] = 'Morning'
+            section['sub_schedules'][0]['bands'][0]['start_minute'] = 660
+            await entry.runtime_data.save_section(1, 'upsert', section['id'], section, settings)
+            await self.hass.async_block_till_done()
+            after = {s.attributes['path']: s.entity_id for s in self.hass.states.async_all('switch') if s.attributes.get('path')}
+            self.assertEqual(set(before.values()), set(after.values()))
+            self.assertTrue(all('renamed_kitchen' in path for path in after))
+            self.assertEqual({eid: registry.async_get(eid).unique_id for eid in after.values()}, unique)
+            response = await self.hass.services.async_call(DOMAIN, 'get_disabled', {}, blocking=True, return_response=True)
+            self.assertEqual({c['path'] for c in response['controls']}, set(after))
+            await entry.runtime_data.save_section(2, 'delete', section['id'])
+            await self.hass.async_block_till_done()
+            for eid in after.values():
+                self.assertIsNone(self.hass.states.get(eid))
+                self.assertIsNone(registry.async_get(eid))
+
+    async def test_control_writes_require_admin_but_internal_automations_are_supported(self):
+        from homeassistant.exceptions import Unauthorized
+        from test_backend import NOW, fixture
+
+        await async_setup_component(self.hass, 'climate', {})
+        entry = ConfigEntry(domain=DOMAIN, title='Scheduling Manager', data={}, options={}, source=SOURCE_USER,
+                            unique_id=DOMAIN, version=1, minor_version=1, discovery_keys={}, subentries_data=[])
+        await self.hass.config_entries.async_add(entry)
+        self.hass.states.async_set('climate.kitchen', 'heat', {'supported_features': 1, 'min_temp': 7, 'max_temp': 35, 'target_temp_step': .5})
+        section, settings = fixture()
+        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow', return_value=NOW):
+            await entry.runtime_data.save_section(0, 'upsert', section['id'], section, settings)
+            await self.hass.async_block_till_done()
+            control = next(s for s in self.hass.states.async_all('switch') if s.attributes.get('kind') == 'schedule')
+            await self.hass.auth.async_create_user('Owner', group_ids=['system-admin'])
+            viewer = await self.hass.auth.async_create_user('Viewer', group_ids=['system-users'])
+            self.assertFalse(viewer.is_admin)
+            context = Context(user_id=viewer.id)
+            with self.assertRaises(Unauthorized):
+                await self.hass.services.async_call('switch', 'turn_on', {'entity_id': control.entity_id}, blocking=True, context=context)
+            with self.assertRaises(Unauthorized):
+                await self.hass.services.async_call(DOMAIN, 'set_disabled', {'path': control.attributes['path'], 'disabled': True}, blocking=True, context=context)
+            result = await self.hass.services.async_call(DOMAIN, 'get_disabled', {'path': control.attributes['path']}, blocking=True, return_response=True, context=context)
+            self.assertIs(result['disabled'], False)
+            await self.hass.services.async_call(DOMAIN, 'set_disabled', {'path': control.attributes['path'], 'disabled': True}, blocking=True)
+            await self.hass.async_block_till_done()
+            self.assertTrue(entry.runtime_data.control_states()[section['id']]['disabled'])
+
+    async def test_path_reads_respect_entity_access_and_handlers_survive_reload(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+        from homeassistant.exceptions import HomeAssistantError
+        from test_backend import NOW, fixture
+
+        await async_setup_component(self.hass, 'climate', {})
+        entry = ConfigEntry(domain=DOMAIN, title='Scheduling Manager', data={}, options={}, source=SOURCE_USER,
+                            unique_id=DOMAIN, version=1, minor_version=1, discovery_keys={}, subentries_data=[])
+        await self.hass.config_entries.async_add(entry)
+        self.hass.states.async_set('climate.kitchen', 'heat', {'supported_features': 1, 'min_temp': 7, 'max_temp': 35, 'target_temp_step': .5})
+        section, settings = fixture()
+        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow', return_value=NOW):
+            await entry.runtime_data.save_section(0, 'upsert', section['id'], section, settings)
+            await self.hass.async_block_till_done()
+            path = entry.runtime_data.control_states()[section['id']]['path']
+            restricted = SimpleNamespace(is_admin=False, permissions=SimpleNamespace(check_entity=lambda eid, permission: False))
+            with patch.object(self.hass.auth, 'async_get_user', AsyncMock(return_value=restricted)):
+                result = await self.hass.services.async_call(DOMAIN, 'get_disabled', {}, blocking=True, return_response=True, context=Context(user_id='restricted'))
+                self.assertEqual(result, {'controls': []})
+                with self.assertRaises(HomeAssistantError):
+                    await self.hass.services.async_call(DOMAIN, 'get_disabled', {'path': path}, blocking=True, return_response=True, context=Context(user_id='restricted'))
+            before = {s.entity_id for s in self.hass.states.async_all('switch') if s.attributes.get('path')}
+            self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+            with self.assertRaises(HomeAssistantError):
+                await self.hass.services.async_call(DOMAIN, 'get_disabled', {}, blocking=True, return_response=True)
+            await self.hass.config_entries.async_setup(entry.entry_id)
+            await self.hass.async_block_till_done()
+            self.assertEqual({s.entity_id for s in self.hass.states.async_all('switch') if s.attributes.get('path')}, before)
+            result = await self.hass.services.async_call(DOMAIN, 'get_disabled', {'path': path}, blocking=True, return_response=True)
+            self.assertIs(result['disabled'], False)
+
     async def test_hacs_only_install_serves_card_and_preserves_module_ownership(self):
         """Only custom_components is installed: no /config/www or manual resources."""
         from aiohttp.test_utils import TestClient, TestServer

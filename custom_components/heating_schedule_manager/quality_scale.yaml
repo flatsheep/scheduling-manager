@@ -3,7 +3,7 @@ rules:
   action-setup: done
   appropriate-polling:
     status: exempt
-    comment: Local calendar timers and HA events; the Away entity is push-updated and never polled.
+    comment: Local calendar timers and HA events; Away, Disabled controls and activity sensors are push-updated without polling.
   brands: done
   common-modules: done
   config-flow-test-coverage: done
@@ -66,16 +66,16 @@ rules:
     comment: No device registry entries are created.
   reconfiguration-flow:
     status: exempt
-    comment: The config entry has no connection parameters; validated schedules are edited through the card.
+    comment: The config entry has no connection parameters; validated schedules use the card and enabled/disabled flags also have programmatic controls.
   entity-category:
     status: exempt
-    comment: Away is a normal user-facing control, not a diagnostic or setup-only entity.
+    comment: Away and Disabled switches are normal user-facing controls, not diagnostic or setup-only entities.
   entity-device-class:
     status: exempt
     comment: No switch device class represents an Away scheduling mode.
   entity-disabled-by-default:
     status: exempt
-    comment: The only entity is the essential Away control.
+    comment: Away, schedule/band Disabled switches and schedule activity sensors are user-facing entities enabled by default.
   docs-data-update: done
   docs-examples: done
   docs-known-limitations: done

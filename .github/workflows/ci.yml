@@ -25,7 +25,7 @@ jobs:
             -e RUFF_CACHE_DIR=/tmp/ruff-cache -e COVERAGE_FILE=/tmp/coverage \
             --entrypoint sh hsm-dev:test -c '
               python -m ruff check . &&
-              python -m ruff format --check custom_components/heating_schedule_manager/__init__.py custom_components/heating_schedule_manager/frontend.py custom_components/heating_schedule_manager/runtime.py custom_components/heating_schedule_manager/config_flow.py custom_components/heating_schedule_manager/switch.py custom_components/heating_schedule_manager/diagnostics.py custom_components/heating_schedule_manager/websocket_api.py custom_components/heating_schedule_manager/presentation.py &&
+              python -m ruff format --check custom_components/heating_schedule_manager/__init__.py custom_components/heating_schedule_manager/frontend.py custom_components/heating_schedule_manager/runtime.py custom_components/heating_schedule_manager/config_flow.py custom_components/heating_schedule_manager/switch.py custom_components/heating_schedule_manager/diagnostics.py custom_components/heating_schedule_manager/websocket_api.py custom_components/heating_schedule_manager/presentation.py custom_components/heating_schedule_manager/controls.py custom_components/heating_schedule_manager/services.py &&
               python -m mypy --cache-dir=/tmp/mypy-cache &&
               python tools/check_backend.py --coverage'
   hassfest:

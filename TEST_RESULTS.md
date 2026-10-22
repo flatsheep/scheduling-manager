@@ -1,5 +1,33 @@
 # Verification results
 
+## Integration/card 1.11.0: programmatic schedule and band controls
+
+- All **nine backend suites** passed on isolated HA **2026.8.1** and **2026.10.1**.
+  Combined line/branch coverage on 2026.8.1: **96.33%**. Ruff, changed-module
+  formatting, gradual mypy and official hassfest passed.
+- **12 path/control cases** cover exact paths, normalization and collisions,
+  solar/unnamed fallbacks, parent-effective versus own disabled flags, unchanged
+  band preferences across parent toggles, deadline cancellation, active starts,
+  idempotence, invalid paths/values, renamed paths, persistence failure and boolean
+  action responses.
+- **Four real HA lifecycle cases** verify native switch/action operation,
+  permissions and filtered reads, entity identity through rename/time edits,
+  registry cleanup on deletion, reload behaviour and exclusion of manager-owned
+  controls from writable scheduling targets.
+- Tests use temporary configurations, mocked devices and network-disabled
+  containers. No physical devices were used to verify write behaviour.
+- Local deployment on HA **2026.10.1** passed configuration validation and startup
+  checks. The saved scheduler model was unchanged, native Disabled switches
+  matched the boolean path API, and no scheduler storage/device errors were
+  reported. Production verification used reads rather than toggling real devices.
+- The same runtime behaviour was deployed locally before release version labels
+  were applied. Release checks and the supported HA-version matrix run through
+  the repository's GitHub Actions workflow.
+- Release-version checks passed: production frontend build, **23 unit tests**,
+  **72 Chromium browser tests**, path/control tests, native control/action and
+  HACS-only installation regressions, Ruff, formatting, gradual mypy and official
+  hassfest (one valid integration, zero invalid).
+
 ## Integration/card 1.10.0: individual band controls
 
 - Frontend production build, **23 unit tests** and **72 Chromium browser tests**

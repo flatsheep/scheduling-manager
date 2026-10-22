@@ -44,8 +44,9 @@
 4. Download through HACS as a custom **Integration** repository. Confirm the real
    end-user card-picker installation and the documented upgrade from a manual
    install. Repository validation is not itself an end-to-end installation test.
-5. Release **v1.10.0** contains integration and card **1.10.0**, including
-   individual time-band enable/disable controls. The first public release was
+5. Release **v1.11.0** contains integration and card **1.11.0**, including native
+   schedule/band Disabled switches and boolean path actions. Individual band
+   controls were introduced in **v1.10.0**. The first public release was
    **v1.9.19** (integration **1.9.4**, card **1.9.19**). The generated ZIP is a
    manual-install fallback, not a HACS `zip_release`.
 6. Submit for the HACS default catalogue separately if desired. A public custom

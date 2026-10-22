@@ -17,6 +17,21 @@
       }
     }
   },
+  "services": {
+    "get_disabled": {
+      "name": "Get disabled state",
+      "description": "Read schedule or time-band disabled booleans. Leave path blank to discover current paths.",
+      "fields": {"path": {"name": "Control path", "description": "The schedule_manager path to read."}}
+    },
+    "set_disabled": {
+      "name": "Set disabled state",
+      "description": "Disable or enable a schedule or time band using its current path.",
+      "fields": {
+        "path": {"name": "Control path", "description": "The schedule_manager path to update."},
+        "disabled": {"name": "Disabled", "description": "True disables permanently. False cancels any timed disable and enables the control."}
+      }
+    }
+  },
   "exceptions": {
     "unsupported_version": {
       "message": "Scheduling Manager requires Home Assistant 2026.7 or later."

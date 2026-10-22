@@ -20,6 +20,7 @@ from .actions import state_action
 from .const import DOMAIN, SIGNAL, VERSION
 from .events import band_active, compile_events, section_active
 from .bands import band_disabled
+from .controls import control_states
 from .dynamic import SOLAR_EVENTS, SolarTimes
 from .storage import inspect_store
 from .validation import Invalid, away_time, identifier, require, temperature, validate
@@ -576,6 +577,33 @@ class Manager:
             if execution_changed:
                 await self._dispatch_committed()
             return self.public()
+
+    def control_states(self):
+        """Discover current paths without mutating saved per-band preferences."""
+        return control_states(self.model, dt_util.utcnow())
+
+    async def set_disabled(self, path, disabled):
+        """Resolve a path to stable IDs, then use revision-guarded UI operations."""
+        require(isinstance(path, str), "path", "Expected a control path")
+        require(type(disabled) is bool, "disabled", "Expected boolean")
+        async with self.lock:
+            require(not self.closed, "manager", "Integration unloaded")
+            await self._expire_away(dt_util.utcnow())
+            target = next((state for state in self.control_states().values() if state["path"] == path), None)
+            if target is None:
+                raise Invalid("path", "Unknown control path; discover current paths with get_disabled")
+            revision = self.model["revision"]
+        if target["kind"] == "schedule":
+            await self.set_section_enabled(revision, target["schedule_id"], not disabled, defer_dispatch=True)
+        elif not disabled:
+            await self.enable_band(revision, target["schedule_id"], target["band_id"], defer_dispatch=True)
+        else:
+            section = deepcopy(next(s for s in self.model["schedules"] if s["id"] == target["schedule_id"]))
+            band = next(b for sub in section["sub_schedules"] for b in sub["bands"] if b["id"] == target["band_id"])
+            if band.get("enabled", True) or band.get("disabled_until"):
+                band["enabled"] = False
+                band.pop("disabled_until", None)
+                await self.save_section(revision, "upsert", section["id"], section)
 
     async def enable_band(self, expected_revision, section_id, band_id, defer_dispatch=False):
         """Enable a saved band, applying start settings only if it is active now."""
