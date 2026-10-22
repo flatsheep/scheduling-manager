@@ -78,7 +78,7 @@ routines should pause when you're away.
 · [Solar time bands](#fixed-and-dynamic-time-band-endpoints)
 · [Disable individual bands](#disable-an-individual-time-band)
 · [Categories and filters](#categories-and-display-order) · [Away](#away)
-· [Programmatic controls](#programmatic-enabledisable-controls)
+· [Programmatic controls](#enable-and-disable-schedules-or-bands-from-automations)
 
 ## Compatibility
 
@@ -290,6 +290,10 @@ In schedule edit mode, open the time-band popup and set **Band status** to
 **Disabled**. Choose **Permanent** or **Until…** with a date and time in
 Home Assistant's timezone. Press **Apply**, then **Save** the schedule.
 
+| Enabled band | Disabled until a date and time |
+| --- | --- |
+| <img src="docs/images/time-band-status.png" alt="Time-band popup with Band status set to Enabled and Apply/Cancel controls" width="300"> | <img src="docs/images/time-band-disabled-until.png" alt="Time-band popup set to Disabled until a selected re-enable date and time" width="300"> |
+
 - The band stays visible in dark grey with a **Disabled** label. Its start and
   end transitions are ignored while disabled; other enabled bands keep working.
 - Disabling an active band leaves device settings unchanged. It does not apply
@@ -309,6 +313,8 @@ Home Assistant's timezone. Press **Apply**, then **Save** the schedule.
 This is separate from the schedule-level **Enable/Disable** control. A disabled
 schedule or applicable Away mode still suspends its bands, even after a band's
 timed disable expires.
+
+<img src="docs/images/disabled-time-band.png" alt="Disabled 06:00 to 07:30 time band with dark grey markers and a Disabled label" width="102">
 
 ### 5. Choose a category and Away participation
 
@@ -415,52 +421,54 @@ target:
 
 Every saved schedule is exposed as a read-only `binary_sensor` with a stable UUID-based identity. Its state is `on` only while the schedule is enabled, inside a resolved time band and not suspended by Away. Creating, editing or deleting a schedule adds, updates or removes its matching entity. Its attributes expose the schedule ID, current name/category, enabled and Away state, member actions, weekday/band definitions (including solar endpoints) and the next scheduled endpoint. These attributes make the saved schedules available to ordinary Home Assistant state consumers, including compatible MCP clients; they do not provide schedule-editing controls.
 
-### Programmatic enable/disable controls
+### Enable and disable schedules or bands from automations
 
-Every schedule and time band also has a writable **Disabled** switch. **On means
-disabled; off means enabled.** Use ordinary `switch.turn_on` / `switch.turn_off`
-actions in automations or scripts. The switch's `path` attribute identifies its
-equivalent boolean API path. Sub-schedules have no enable/disable control.
+Each schedule and time band has a **Disabled** switch. **On disables; off
+enables.** Use these switches in Home Assistant automations and scripts. There is
+no switch for a sub-schedule.
 
-For example, a schedule named **Schedule1** initially gets a switch such as:
+<img src="docs/images/disabled-switch-entities.png" alt="Home Assistant entity list showing the Guest Bedroom schedule Disabled switch and two individual time-band Disabled switches" width="506">
+
+| Control | Example entity ID | Turn on | Turn off |
+| --- | --- | --- | --- |
+| Schedule | `switch.schedule_manager_schedule1_disabled` | Disable the schedule | Enable it |
+| Band | `switch.schedule_manager_schedule1_weekdays_band_on_0700_off_1000_disabled` | Disable this band | Enable it |
+
+Switch entity IDs are assigned by Home Assistant and can be renamed. Find the
+current IDs under **Settings → Devices & services → Entities**, or read the
+`path` attribute and use the programmatic actions below. The dotted paths are API
+identifiers, not HA entity IDs.
+
+Each switch also works with ordinary HA actions:
 
 ```yaml
 action: switch.turn_on
 target:
-  entity_id: switch.schedule_manager_schedule1_disabled
+  entity_id: switch.schedule_manager_schedule1_weekdays_band_on_0700_off_1000_disabled
 ```
 
-This disables the schedule. Use `switch.turn_off` to enable it. Confirm the
-switch's current entity ID in **Settings → Devices & services → Entities**;
-entity IDs can be renamed in HA. The boolean path equivalents look like:
+#### Read and set the boolean path
 
-```text
-schedule_manager.schedule1.disabled
-schedule_manager.schedule1.weekdays.band-on-0700-off-1000.disabled
-```
-
-These are API paths, not HA entity IDs. To discover the paths for your own
-schedules, call **Scheduling Manager: Get disabled state** without a path:
+Paths follow schedule names, sub-schedule names and band times. They are useful
+when reading or setting a control without looking up its switch entity ID.
 
 ```yaml
 action: heating_schedule_manager.get_disabled
 data: {}
-response_variable: schedule_controls
+response_variable: controls
 ```
 
-The discovery response's `controls` list contains all readable schedule and band
-paths. Read a single control by supplying its path:
+This returns readable schedule and band paths in `controls.controls`. Read one
+path with `path` supplied:
 
 ```yaml
 action: heating_schedule_manager.get_disabled
 data:
-  path: schedule_manager.schedule1.disabled
-response_variable: schedule_state
+  path: schedule_manager.schedule1.weekdays.band-on-0700-off-1000.disabled
+response_variable: band_status
 ```
 
-For example, `{{ schedule_state.disabled }}` reads its boolean value in a later
-template. Responses also include `own_disabled`, `parent_disabled` and the
-applicable `disabled_until` time. To enable a band using its boolean path:
+The returned `band_status.disabled` is a boolean. Set a path by sending a boolean:
 
 ```yaml
 action: heating_schedule_manager.set_disabled
@@ -469,26 +477,22 @@ data:
   disabled: false
 ```
 
-- `true` disables permanently. `false` cancels any timed disable and enables the
-  schedule or band immediately. An active band applies its start settings; an
-  inactive band waits for its next transition. Schedule controls use the same
-  device-setting behaviour as the existing UI controls.
-- A disabled parent makes all its bands report `disabled: true`, without changing
-  their own flags. Re-enabling the parent preserves individually disabled bands.
-  Enabling a band while its parent is disabled clears that band's own disable,
-  but does not enable the parent or command devices.
-- Away remains separate. `suspended_by_away` reports it, and applicable Away still
-  prevents a band start even when the band is enabled.
-- Names are normalized to lowercase with underscores. Paths follow name/time
-  changes; native switch entity identities remain tied to stable internal UUIDs.
-  Duplicate names receive distinguishing UUID suffixes. Discover current paths
-  rather than guessing a suffixed path.
-- Unnamed sub-schedules use `sub_schedule_1`, etc. Solar endpoints use event and
-  offset names, such as `band-on-sunrise-plus-30-off-1000`. End `2359` means the
-  following midnight, as in the card.
-- These controls update saved configuration immediately, so an already-open card
-  draft can become stale. User-context writes require an administrator; HA's
-  internal automation/script calls without a user context are supported.
+- `disabled: true` disables permanently. `false` enables immediately and cancels
+  any timed disable. If the band is active, its start settings are applied;
+  otherwise it waits for its next scheduled transition.
+- A disabled parent makes each band report `disabled: true`, while preserving its
+  `own_disabled` value. Re-enabling the parent does not enable its disabled bands.
+- Enabling a band under a disabled parent clears that band's own Disabled value,
+  but leaves the parent disabled and sends no device command.
+- Away is separate. Read `suspended_by_away`; applicable Away still suspends normal
+  scheduling even when the parent and band are enabled.
+- Paths are normalized to lowercase underscores and follow renames or time edits.
+  Duplicate names get UUID suffixes. Unnamed sub-schedules use `sub_schedule_1`,
+  and solar bands use their event and offset in the band name. Discover current
+  paths instead of guessing when names collide.
+- Writes update saved state immediately and can make an open card draft stale.
+  User-context writes require an administrator. Home Assistant automation calls
+  without a user context are supported.
 
 ## Editing and timeline controls
 
