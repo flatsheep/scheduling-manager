@@ -635,6 +635,7 @@ function predictedMinute(dynamic, solar = {}) {
   return minute === void 0 || minute === null ? void 0 : minute + dynamic.offset;
 }
 function resolvedBand(band, solar = {}) {
+  if (band.one_off_run?.minutes) return [...band.one_off_run.minutes];
   const values = ["start", "end"].map((endpoint) => {
     const dynamic = band[`${endpoint}_dynamic`];
     if (!dynamic) return band[`${endpoint}_minute`];
@@ -737,7 +738,6 @@ function draftError(draft, caps) {
     if (!sub.days.length) return "Select at least one day in every sub-schedule.";
     if (sub.days.some((d3) => seen.has(d3))) return "A weekday can belong to only one sub-schedule.";
     sub.days.forEach((d3) => seen.add(d3));
-    if (!sub.bands.length) return "Add at least one time band in every sub-schedule.";
     for (const b3 of sub.bands) {
       const error = bandError(sub, b3.start_minute, b3.end_minute, b3.id, b3);
       if (error) return error;
@@ -748,7 +748,7 @@ function draftError(draft, caps) {
     const cap = caps.find((c5) => c5.entity_id === setting.entity_id);
     if (!cap?.supported) return `Unsupported device: ${setting.entity_id}`;
     if (!setting.entity_id.startsWith("climate.")) {
-      if (!validState(member.start_state, cap) || !validState(member.end_state, cap)) return `Choose valid start and end states for ${cap.name}.`;
+      if (!validState(member.start_state, cap) || !validState(member.end_state, cap)) return `Choose valid Start and Stop states for ${cap.name}.`;
       if (cap.kind === "number" && [member.start_unit, member.end_unit].some((unit) => unit !== void 0 && unit !== (cap.unit ?? ""))) return `Unit changed; choose both values again for ${cap.name}.`;
       continue;
     }
@@ -917,6 +917,7 @@ var HeatingTimeline = class extends i4 {
     .marker {cursor:pointer;touch-action:pan-x pan-y;outline:none}svg.editing .marker{touch-action:none}.marker:focus path,.marker.selected path {stroke:var(--primary-text-color,#222);stroke-width:3}
     .start {fill:var(--orange,#ff861f)} .end {fill:var(--blue,#009edc)}
     .marker.disabled path{fill:#555}.disabled-band{color:#555}.disabled-label{fill:#555;font-weight:700;paint-order:stroke;stroke:var(--card-background-color,#fff);stroke-width:3px}
+    .marker.one-off path,.marker.one-off:focus path,.marker.one-off.selected path{stroke:#e53935;stroke-width:2.5}.one-off-badge{pointer-events:none}.one-off-badge circle{fill:var(--ha-card-background,var(--card-background-color,#fff));stroke:#e53935;stroke-width:2}.one-off-badge ha-icon{display:block;width:24px;height:24px;line-height:0;--mdc-icon-size:24px;--ha-icon-size:24px;color:#e53935;transform:scale(.5833333333);transform-origin:top left}.ghost-preview .one-off-preview .ghost-marker{stroke:#e53935}
     .current-label rect{fill:var(--ha-card-background,var(--card-background-color,#fff));stroke:var(--orange,#ff861f);stroke-width:2}
     .current-label text{fill:var(--orange,#ff861f);font-weight:700;font-size:16px}
     .marker-tools{display:flex;gap:6px;margin:4px 0;min-height:44px;flex-wrap:wrap}button{font:inherit;min-height:44px;padding:6px 12px;border:1px solid var(--divider-color,#777);border-radius:7px;background:var(--secondary-background-color,#eee);color:var(--primary-text-color,#222);cursor:pointer}button:focus-visible{outline:3px solid var(--primary-color,#03a9f4)}
@@ -928,6 +929,9 @@ var HeatingTimeline = class extends i4 {
   }
   emit(name, detail) {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+  }
+  oneOffBadge(center) {
+    return w`<g class="one-off-badge" transform=${`translate(${center} 16) scale(1.3)`} role="img" aria-label="One-off time band"><circle r="10"/><foreignObject x="-7" y="-7" width="14" height="14">${b2`<ha-icon icon="mdi:calendar-clock" aria-hidden="true"></ha-icon>`}</foreignObject></g>`;
   }
   position(event) {
     const canvas = this.shadowRoot.querySelector("svg");
@@ -996,6 +1000,7 @@ var HeatingTimeline = class extends i4 {
       clearTimeout(this.tap);
       this.lastTap = void 0;
       g2.band[g2.endpoint] = clampEndpoint(this.sub, g2.band, g2.endpoint, this.position(event), this.solarMinutes);
+      if (g2.band.one_off_run) delete g2.band.one_off_run.minutes;
       this.requestUpdate();
       this.emit("band-change", {});
     }
@@ -1099,7 +1104,7 @@ var HeatingTimeline = class extends i4 {
       const bottom = !start && compact ? 104 : 88;
       const center = x2(minute) + offset;
       const labelY = (top + bottom) / 2;
-      return w`<g data-marker=${key} class="marker ${start ? "start" : "end"} ${bandDisabled(b3) ? "disabled" : ""} ${key === this.activeMarker ? "selected" : ""}" role="button" tabindex="0" aria-pressed=${key === this.activeMarker} aria-label=${`${bandDisabled(b3) ? "Disabled. " : ""}${start ? "Target start" : "Setback end"} ${time(minute)}${minute === 1440 ? " End of day / midnight" : ""}. ${this.edit ? "Enter edits, Delete removes band, arrows adjust five minutes." : "Select to bring forward. Tab selects overlapping markers."}`}
+      return w`<g data-marker=${key} class="marker ${start ? "start" : "end"} ${b3.one_off ? "one-off" : ""} ${bandDisabled(b3) ? "disabled" : ""} ${key === this.activeMarker ? "selected" : ""}" role="button" tabindex="0" aria-pressed=${key === this.activeMarker} aria-label=${`${b3.one_off ? "One-off. " : ""}${bandDisabled(b3) ? "Disabled. " : ""}${start ? "Target start" : "Setback stop"} ${time(minute)}${minute === 1440 ? " End of day / midnight" : ""}. ${this.edit ? "Enter edits, Delete removes band, arrows adjust five minutes." : "Select to bring forward. Tab selects overlapping markers."}`}
             @pointerdown=${(e5) => this.down(e5, b3, endpoint)}
             @focus=${() => {
         if (this.activeMarker !== key) this.promote(key, true);
@@ -1123,6 +1128,7 @@ var HeatingTimeline = class extends i4 {
         if (["ArrowLeft", "ArrowRight"].includes(e5.key)) {
           if (!(endpoint === "start_minute" ? b3.start_dynamic : b3.end_dynamic)) {
             b3[endpoint] = clampEndpoint(this.sub, b3, endpoint, minute + (e5.key === "ArrowLeft" ? -5 : 5), this.solarMinutes);
+            if (b3.one_off_run) delete b3.one_off_run.minutes;
             this.emit("band-change", {});
             this.requestUpdate();
           }
@@ -1135,10 +1141,14 @@ var HeatingTimeline = class extends i4 {
           </g>`;
     })}
       </g>
+      ${this.sub.bands.filter((b3) => b3.one_off).map((b3) => {
+      const minutes = resolvedBand(b3, this.solarMinutes);
+      return minutes ? this.oneOffBadge(x2((minutes[0] + minutes[1]) / 2)) : A;
+    })}
       ${this.showCurrentTime ? w`<line class="current-line" x1=${x2(this.minute)} y1="31" x2=${x2(this.minute)} y2="149" stroke="var(--orange,#ff861f)" stroke-width="3.5" pointer-events="none"/>` : A}
       ${this.previewSub ? w`<g class="ghost-preview" role="img" aria-label=${`Preview ${this.previewDay} sub-schedule`}>${this.previewSub.bands.map((band) => {
       const minutes = resolvedBand(band, this.previewSolarMinutes);
-      return minutes ? w`<g class=${bandDisabled(band) ? "disabled-preview" : ""}><line class="ghost-connector" x1=${x2(minutes[0])} y1="68" x2=${x2(minutes[1])} y2="68"/>${bandDisabled(band) ? w`<text class="disabled-label" x=${x2((minutes[0] + minutes[1]) / 2)} y="24" text-anchor="middle">Disabled</text>` : A}${["start_minute", "end_minute"].map((endpoint) => {
+      return minutes ? w`<g class=${`${bandDisabled(band) ? "disabled-preview" : ""} ${band.one_off ? "one-off-preview" : ""}`}><line class="ghost-connector" x1=${x2(minutes[0])} y1="68" x2=${x2(minutes[1])} y2="68"/>${band.one_off ? this.oneOffBadge(x2((minutes[0] + minutes[1]) / 2)) : A}${bandDisabled(band) ? w`<text class="disabled-label" x=${x2((minutes[0] + minutes[1]) / 2)} y="24" text-anchor="middle">Disabled</text>` : A}${["start_minute", "end_minute"].map((endpoint) => {
         const start = endpoint === "start_minute", minute = minutes[start ? 0 : 1], center = x2(minute), dynamic = start ? band.start_dynamic : band.end_dynamic;
         return w`<g class="ghost-endpoint"><path class=${`ghost-marker ${start ? "start" : "end"}`} d=${`M ${center} 108 L ${center - 9} 82 L ${center - 9} 30 L ${center + 9} 30 L ${center + 9} 82 Z`}/><text x=${center} y="56" text-anchor="middle" dominant-baseline="central" transform=${`rotate(-90 ${center} 56)`}>${time(minute)}${dynamic ? " *" : ""}</text></g>`;
       })}</g>` : A;
@@ -1630,13 +1640,25 @@ var SchedulingManagerCard = class extends i4 {
       }
       const climate = cap.entity_id.startsWith("climate.");
       if (climate ? p4.target === void 0 || p4.setback === void 0 || !validTemperature(p4.target, cap) || !validTemperature(p4.setback, cap) : !validState(p4.start, cap) || !validState(p4.end, cap)) {
-        this.error = climate ? "Choose valid temperatures." : "Choose valid start and end states.";
+        this.error = climate ? "Choose valid temperatures." : "Choose valid Start and Stop states.";
         return;
       }
       const existing = Object.entries(this.draft.settings).find(([, s5]) => s5.entity_id === cap.entity_id);
       const key = existing?.[0] ?? uuid();
       this.draft.settings[key] = existing?.[1] ?? { entity_id: cap.entity_id, registry_id: cap.registry_id, ...climate ? { setback: { value: p4.setback, unit: cap.unit } } : {} };
       this.draft.section.entities.push(climate ? { entity_key: key, target: { value: p4.target, unit: cap.unit } } : { entity_key: key, start_state: p4.start, end_state: p4.end, ...cap.kind === "number" ? { start_unit: cap.unit ?? "", end_unit: cap.unit ?? "" } : {} });
+      this.changed();
+    } else if (p4.kind === "sub-disable") {
+      if (p4.disabled && p4.disableMode === "until" && !p4.until) {
+        this.error = "Choose a date and time to re-enable the sub-schedule.";
+        return;
+      }
+      delete p4.sub.enabled;
+      delete p4.sub.disabled_until;
+      if (p4.disabled) {
+        p4.sub.enabled = false;
+        if (p4.disableMode === "until") p4.sub.disabled_until = p4.until;
+      }
       this.changed();
     } else if (p4.kind === "band") {
       const start = parseTime(p4.start);
@@ -1650,7 +1672,8 @@ var SchedulingManagerCard = class extends i4 {
         }
       }
       const band = { id: p4.band?.id ?? uuid(), start_minute: start, end_minute: end, ...p4.start_dynamic ? { start_dynamic: { ...p4.start_dynamic } } : {}, ...p4.end_dynamic ? { end_dynamic: { ...p4.end_dynamic } } : {} };
-      if (p4.disabled) {
+      if (p4.band?.one_off || !p4.band && p4.one_off) band.one_off = true;
+      if (p4.disabled && !band.one_off) {
         band.enabled = false;
         if (p4.disableMode === "until") {
           if (!p4.until) {
@@ -1671,6 +1694,7 @@ var SchedulingManagerCard = class extends i4 {
         delete p4.band.enabled;
         delete p4.band.disabled_until;
         Object.assign(p4.band, band);
+        if (p4.band.one_off_run) delete p4.band.one_off_run.minutes;
       } else sub.bands.push(band);
       sub.bands.sort((a3, b3) => a3.start_minute - b3.start_minute);
       this.changed();
@@ -1706,6 +1730,8 @@ var SchedulingManagerCard = class extends i4 {
     const settings = draft?.settings ?? this.saved.model.entity_settings;
     const selected = draft?.selected ?? section.sub_schedules.findIndex((s5) => s5.days.includes(this.clock.day));
     const sub = section.sub_schedules[selected];
+    const subDisabled = !!sub && bandDisabled(sub);
+    const allDaysAssigned = new Set(section.sub_schedules.flatMap((schedule) => schedule.days)).size === 7;
     const away = this.saved.model.away && section.away_enabled !== false;
     const enabled = section.enabled !== false;
     const preview = !editing && this.peek?.sectionId === section.id ? section.sub_schedules.find((schedule) => schedule.id === this.peek.subId) : void 0;
@@ -1733,7 +1759,7 @@ var SchedulingManagerCard = class extends i4 {
       const liveState = this.hass.states[setting.entity_id];
       const available = !!liveState && (liveState.state === void 0 ? !!cap?.available : !["unknown", "unavailable"].includes(liveState.state));
       const temp = (value, target) => b2`<button class=${target ? "target" : "setback"} ?disabled=${!editing} aria-label=${`${target ? "Target" : "Shared setback"} for ${cap?.name ?? setting.entity_id}`} @click=${() => this.temperature(member.entity_key, target)}>${value.value}<small>${value.unit}</small></button>`;
-      const state = (value, start) => b2`<button class=${start ? "target" : "setback"} ?disabled=${!editing} aria-label=${`${start ? "Start" : "End"} state for ${cap?.name ?? setting.entity_id}`} @click=${() => this.editState(member.entity_key, start)}>${value === "on" || value === "off" ? value.toUpperCase() : value}${start ? member.start_unit ? b2`<small>${member.start_unit}</small>` : A : member.end_unit ? b2`<small>${member.end_unit}</small>` : A}</button>`;
+      const state = (value, start) => b2`<button class=${start ? "target" : "setback"} ?disabled=${!editing} aria-label=${`${start ? "Start" : "Stop"} state for ${cap?.name ?? setting.entity_id}`} @click=${() => this.editState(member.entity_key, start)}>${value === "on" || value === "off" ? value.toUpperCase() : value}${start ? member.start_unit ? b2`<small>${member.start_unit}</small>` : A : member.end_unit ? b2`<small>${member.end_unit}</small>` : A}</button>`;
       const climate = setting.entity_id.startsWith("climate.");
       return b2`<div class="entity">${climate ? temp(member.target, true) : state(member.start_state, true)}<span title=${setting.entity_id}>${liveState?.attributes.friendly_name ?? cap?.name ?? setting.entity_id}${!available ? b2`<small>Unavailable · cached settings</small>` : A}</span>${climate ? temp(setting.setback, false) : state(member.end_state, false)}${editing ? b2`<button class="trash-button entity-trash" aria-label=${`Remove ${setting.entity_id}`} title="Remove entity from section" @click=${async () => {
         if (await this.ask("Remove this entity on Save?")) {
@@ -1758,15 +1784,16 @@ var SchedulingManagerCard = class extends i4 {
         ${!editing ? b2`<div class="view-days" role="list" aria-label="Schedule days">${days.map((label, day) => {
       const owner = section.sub_schedules.find((schedule) => schedule.days.includes(day));
       if (!owner) return b2`<span class="view-day unscheduled" role="listitem" aria-label=${`${label}: No schedule`}>${label}</span>`;
-      if (owner === sub) return b2`<span role="listitem"><button class="view-day active" aria-label=${`Show current ${label} sub-schedule`} @click=${() => this.previewDay(section, day)}>${label}</button></span>`;
+      if (owner === sub) return b2`<span role="listitem"><button class=${`view-day active ${bandDisabled(owner) ? "disabled-day" : ""}`} aria-label=${`Show current ${label} sub-schedule${bandDisabled(owner) ? ", disabled" : ""}`} @click=${() => this.previewDay(section, day)}>${label}</button></span>`;
       const previewed = owner === preview;
-      return b2`<span role="listitem"><button class=${`view-day inactive ${previewed ? "previewed" : ""}`} aria-label=${`Preview ${label} sub-schedule`} aria-pressed=${previewed} @click=${() => this.previewDay(section, day)}>${label}</button></span>`;
+      return b2`<span role="listitem"><button class=${`view-day inactive ${previewed ? "previewed" : ""} ${bandDisabled(owner) ? "disabled-day" : ""}`} aria-label=${`Preview ${label} sub-schedule${bandDisabled(owner) ? ", disabled" : ""}`} aria-pressed=${previewed} @click=${() => this.previewDay(section, day)}>${label}</button></span>`;
     })}<span class="preview-selection" role="listitem" data-preview-chooser=${section.id}><span class="preview-size" aria-hidden="true">${section.sub_schedules.map((schedule, index) => b2`<span>${this.subLabel(schedule, index)}</span>`)}</span>${displayedSubNumber ? b2`<button class=${`view-sub-number ${preview ? "preview" : "current"} ${this.subName(displayedSub) ? "named" : ""}`} aria-label=${`Choose preview sub-schedule; ${preview ? "preview" : "current"} ${displayedSubLabel}`} aria-expanded=${this.popup?.kind === "preview-subs" && this.popup.sectionId === section.id} title="Choose a sub-schedule to preview" @click=${() => this.openPreviewChooser(section)}>${displayedSubLabel}</button>` : A}${this.popup?.kind === "preview-subs" && this.popup.sectionId === section.id ? this.previewChoices(section, displayedSub) : A}</span></div>` : A}
+        ${!editing && !viewStatus && displayedSub?.disabled_until && bandDisabled(displayedSub) ? b2`<p class="sub-disabled-until">Disabled until ${awayUntilLabel(displayedSub.disabled_until, this.saved.timezone)}</p>` : A}
         ${draft?.deleted ? b2`<p class="empty">Section pending deletion. Save commits; Cancel restores.</p>` : b2`
           ${editing ? b2`<div class="days">${days.map((day, d3) => {
       const owner = section.sub_schedules.findIndex((s5) => s5.days.includes(d3));
-      const blocked = owner !== -1 && owner !== selected;
-      return b2`<button class=${sub.days.includes(d3) ? "selected" : ""} ?disabled=${blocked} title=${blocked ? `Assigned to sub-schedule ${owner + 1}` : day} aria-pressed=${sub.days.includes(d3)} @click=${() => {
+      const blocked = owner !== -1 && owner !== selected, locked = sub.bands.some((b3) => b3.one_off_run);
+      return b2`<button class=${sub.days.includes(d3) ? `selected ${bandDisabled(sub) ? "disabled-day" : ""}` : ""} ?disabled=${blocked || locked} title=${locked ? "Selected one-off weekdays are read-only" : blocked ? `Assigned to sub-schedule ${owner + 1}` : day} aria-pressed=${sub.days.includes(d3)} @click=${() => {
         sub.days = sub.days.includes(d3) ? sub.days.filter((v3) => v3 !== d3) : [...sub.days, d3];
         this.changed();
       }}>${day}</button>`;
@@ -1775,18 +1802,27 @@ var SchedulingManagerCard = class extends i4 {
       this.draft.selected = Number(e5.target.value);
       this.changed();
     }}>${section.sub_schedules.map((schedule, index) => b2`<option value=${String(index)} ?selected=${index === selected} title=${schedule.days.map((day) => days[day]).join(", ") || "No days yet"}>${this.subLabel(schedule, index)}</option>`)}</select>
-            <button class="add" aria-label="Add sub-schedule" ?disabled=${section.sub_schedules.length >= 7 || new Set(section.sub_schedules.flatMap((s5) => s5.days)).size === 7} @click=${() => {
+            ${section.sub_schedules.length < 7 && !allDaysAssigned ? b2`<button class="add" aria-label="Add sub-schedule" title="Add sub-schedule" @click=${() => {
       section.sub_schedules.push(newSub());
       this.draft.selected = section.sub_schedules.length - 1;
       this.changed();
-    }}>＋</button>
-            <button class="remove" aria-label="Delete sub-schedule" ?disabled=${section.sub_schedules.length === 1} @click=${async () => {
+    }}>＋</button>` : A}
+            <button class=${subDisabled ? "enable" : "disable"} aria-label=${`${subDisabled ? "Enable" : "Disable"} sub-schedule`} @click=${() => {
+      if (subDisabled) {
+        delete sub.enabled;
+        delete sub.disabled_until;
+        this.changed();
+      } else {
+        this.popup = { kind: "sub-disable", sub, disabled: false, disableMode: sub.disabled_until ? "until" : "permanent", until: sub.disabled_until };
+      }
+    }}>${subDisabled ? "Enable" : "Disable"}</button>
+            ${section.sub_schedules.length > 1 ? b2`<button class="remove" aria-label="Delete sub-schedule" title="Delete sub-schedule" @click=${async () => {
       if (await this.ask("Delete this sub-schedule on Save?")) {
         section.sub_schedules.splice(selected, 1);
         this.draft.selected = 0;
         this.changed();
       }
-    }}>✕</button>
+    }}>${this.trashIcon()}</button>` : A}
           </div><label class="sub-name">Sub-schedule name (optional)<input aria-label="Sub-schedule name" placeholder=${`Sub-schedule ${selected + 1}`} .value=${l3(typeof sub.name === "string" ? sub.name : "")} @input=${(e5) => {
       sub.name = e5.target.value;
       this.changed();
@@ -1897,10 +1933,10 @@ var SchedulingManagerCard = class extends i4 {
     const previewDate = solarDate(this.saved?.timezone ?? "UTC", previewSub && !previewSub.days.includes(this.clock.day) ? previewSub.days[0] : void 0);
     const resolved = p4.kind === "band" && validDynamic(p4.start_dynamic) && validDynamic(p4.end_dynamic) ? resolvedBand({ id: "popup-preview", start_minute: parseTime(p4.start), end_minute: parseTime(p4.end), start_dynamic: p4.start_dynamic, end_dynamic: p4.end_dynamic }, this.solarFor(previewSub)) : void 0;
     const endMinimum = p4.kind === "band" && !p4.end_dynamic && resolved && Number.isFinite(resolved[0]) ? Math.min(1440, resolved[0] + (p4.start_dynamic ? 0 : 5)) : void 0;
-    const displayedEnd = resolved && Number.isFinite(resolved[1]) ? Math.max(resolved[1], endMinimum ?? 0) : void 0;
+    const displayedStop = resolved && Number.isFinite(resolved[1]) ? Math.max(resolved[1], endMinimum ?? 0) : void 0;
     const fixedTime = (endpoint, label) => {
       if (p4.kind !== "band") return A;
-      const value = endpoint === "end" && displayedEnd !== void 0 ? time(displayedEnd) : p4[endpoint];
+      const value = endpoint === "end" && displayedStop !== void 0 ? time(displayedStop) : p4[endpoint];
       const [hour, minute] = value.split(":").map(Number);
       const minutes = Array.from({ length: 12 }, (_2, i7) => i7 * 5);
       if (endpoint === "end" && hour === 23) minutes.push(59);
@@ -1949,19 +1985,19 @@ var SchedulingManagerCard = class extends i4 {
       p4.value = e5.target.value;
     }}></label>` : A}
       ${p4.kind === "temperature" ? b2`${numeric(p4.target ? "Target" : "Shared setback", "value", p4.value)}${!p4.target ? b2`<p>Shared across schedules for this entity.</p>` : A}<p>Range ${cap?.min}–${cap?.max}; step ${cap?.step}. Unavailable devices use cached capabilities.</p>` : A}
-      ${p4.kind === "state" ? stateField(p4.start ? "Start state" : "End state", p4.value, (v3) => {
+      ${p4.kind === "state" ? stateField(p4.start ? "Start state" : "Stop state", p4.value, (v3) => {
       p4.value = v3;
     }) : A}
       ${p4.kind === "entities" ? b2`<label>Search<input aria-label="Search entities" .value=${p4.query} @input=${(e5) => {
       this.popup = { ...p4, query: e5.target.value };
     }}></label><div class="choices">${this.caps.filter((c5) => c5.supported && !this.draft.section.entities.some((m3) => this.draft.settings[m3.entity_key].entity_id === c5.entity_id) && (c5.name + " " + c5.entity_id).toLowerCase().includes(p4.query.toLowerCase())).map((c5) => b2`<button type="button" class=${p4.selected === c5.entity_id ? "selected" : ""} ?disabled=${!c5.available} @click=${() => this.chooseEntity(c5)}>${c5.name}<small>${c5.entity_id}${!c5.available ? " \xB7 Unavailable" : ""}</small></button>`)}</div>${cap ? cap.entity_id.startsWith("climate.") ? b2`${numeric("Target", "target", p4.target)}${numeric("Shared setback", "setback", p4.setback, !!Object.values(this.draft.settings).find((s5) => s5.entity_id === cap.entity_id))}<p>Existing climate entities reuse their shared setback.</p>` : b2`${stateField("Start state", p4.start, (v3) => {
       p4.start = v3;
-    })}${stateField("End state", p4.end, (v3) => {
+    })}${stateField("Stop state", p4.end, (v3) => {
       p4.end = v3;
     })}` : A}` : A}
-      ${p4.kind === "band" ? b2`${p4.reason ? b2`<p>${p4.reason}</p>` : A}<div class="band-times">${["start", "end"].map((endpoint) => {
-      const label = endpoint === "start" ? "Start" : "End", field = `${endpoint}_dynamic`, dynamic = p4[field];
-      const minute = endpoint === "start" ? resolved?.[0] : displayedEnd;
+      ${p4.kind === "band" ? b2`${p4.reason ? b2`<p>${p4.reason}</p>` : A}${p4.band?.one_off ? b2`<p class="one-off-details"><ha-icon icon="mdi:calendar-clock" aria-hidden="true"></ha-icon><strong>One-off</strong></p>` : A}<fieldset><div class="band-times">${["start", "end"].map((endpoint) => {
+      const label = endpoint === "start" ? "Start" : "Stop", field = `${endpoint}_dynamic`, dynamic = p4[field];
+      const minute = endpoint === "start" ? resolved?.[0] : displayedStop;
       const predicted = predictedMinute(dynamic, this.solarFor(previewSub));
       const prediction = predicted === void 0 ? "Unavailable" : `${time((predicted % 1440 + 1440) % 1440)} *${predicted < 0 ? " (previous day)" : predicted >= 1440 ? " (next day)" : ""}`;
       const requested = dynamic ? predicted : parseTime(p4[endpoint]);
@@ -1980,10 +2016,10 @@ var SchedulingManagerCard = class extends i4 {
         dynamic.offset = Number(e5.target.value);
         this.requestUpdate();
       }}></label><output class="endpoint-preview" aria-label=${`${label} resolved time`} aria-live="polite">${prediction}</output>` : A}
-          ${changed ? b2`<output class="endpoint-clamp" aria-label=${`${label} band time`} aria-live="polite">Band time: ${time(minute)}${dynamic ? " *" : ""}</output>${matchesStart ? b2`<small class="endpoint-clamp">End matches start</small>` : A}` : A}
+          ${changed ? b2`<output class="endpoint-clamp" aria-label=${`${label} band time`} aria-live="polite">Band time: ${time(minute)}${dynamic ? " *" : ""}</output>${matchesStart ? b2`<small class="endpoint-clamp">Stop matches start</small>` : A}` : A}
         </div>`;
-    })}</div>${p4.start_dynamic || p4.end_dynamic ? b2`<p class="band-preview-date">Times for ${previewDate}</p>` : A}<p class="band-help">Five-minute steps. End 23:59 means midnight.</p>
-      <label>Band status<select aria-label="Band status" .value=${p4.disabled ? "disabled" : "enabled"} @change=${(e5) => {
+    })}</div>${p4.start_dynamic || p4.end_dynamic ? b2`<p class="band-preview-date">Times for ${previewDate}</p>` : A}<p class="band-help">Five-minute steps. Stop 23:59 means midnight.</p>
+      ${!(p4.band?.one_off || p4.one_off) ? b2`<label>Band status<select aria-label="Band status" .value=${p4.disabled ? "disabled" : "enabled"} @change=${(e5) => {
       p4.disabled = e5.target.value === "disabled";
       this.requestUpdate();
     }}><option value="enabled">Enabled</option><option value="disabled">Disabled</option></select></label>
@@ -1994,7 +2030,19 @@ var SchedulingManagerCard = class extends i4 {
       ${p4.disableMode === "until" ? b2`<label>Re-enable date and time<input aria-label="Re-enable date and time" type="datetime-local" .value=${p4.until ? p4.until.includes("+") || p4.until.endsWith("Z") ? localDateTime(this.saved.timezone, new Date(p4.until)) : p4.until : ""} min=${localDateTime(this.saved.timezone)} @input=${(e5) => {
       p4.until = e5.target.value;
     }}></label>` : A}` : A}
-      <p>Disabled bands are skipped. Enabling an active band runs its start settings. Apply, then Save.</p>` : A}
+      <p>Disabled bands are skipped. Enabling an active band runs its start settings. Apply, then Save.</p>` : A}</fieldset>${!p4.band ? b2`<div class="one-off-option"><label class="filter-check"><input type="checkbox" aria-label="One-off" aria-describedby="one-off-help" .checked=${!!p4.one_off} @change=${(e5) => {
+      p4.one_off = e5.target.checked;
+      if (p4.one_off) p4.disabled = false;
+      this.requestUpdate();
+    }}>One-off</label><p id="one-off-help">Will be removed once complete</p></div>` : A}` : A}
+      ${p4.kind === "sub-disable" ? b2`<label>Sub-schedule status<select aria-label="Sub-schedule status" .value=${!p4.disabled ? "enabled" : p4.disableMode} @change=${(e5) => {
+      const value = e5.target.value;
+      p4.disabled = value !== "enabled";
+      p4.disableMode = value === "until" ? "until" : "permanent";
+      this.requestUpdate();
+    }}><option value="enabled">Enabled</option><option value="permanent">Disabled permanently</option><option value="until">Disabled until…</option></select></label>${p4.disabled && p4.disableMode === "until" ? b2`<label>Re-enable date and time<input aria-label="Re-enable date and time" required type="datetime-local" .value=${p4.until ? p4.until.includes("+") || p4.until.endsWith("Z") ? localDateTime(this.saved.timezone, new Date(p4.until)) : p4.until : ""} min=${localDateTime(this.saved.timezone)} @input=${(e5) => {
+      p4.until = e5.target.value;
+    }}></label><p>Times use ${this.saved.timezone}.</p>` : A}<p>Disabled sub-schedules skip all band transitions and leave devices unchanged. Apply, then Save.</p>` : A}
       ${p4.kind === "subs" ? b2`<div class="choices">${this.draft.section.sub_schedules.map((sub, i7) => b2`<button type="button" class=${i7 === this.draft.selected ? "selected" : ""} @click=${() => {
       this.draft.selected = i7;
       this.changed();
@@ -2092,11 +2140,16 @@ var SchedulingManagerCard = class extends i4 {
   }
   static {
     this.styles = i`
+    .one-off-option .filter-check{margin-bottom:0}.one-off-option #one-off-help{margin:2px 0 0}
+    fieldset{border:0;padding:0;margin:0;min-width:0}.one-off-details{display:flex;align-items:center;gap:6px;font-size:14px}.one-off-details ha-icon{color:#e53935}
     :host{--orange:#ff861f;--blue:var(--info-color,#009edc);--green:var(--success-color,#23ad4b);--red:var(--error-color,#b71936);--timeline-min-width:600px;display:block;color:var(--primary-text-color,#222);font-family:var(--paper-font-body1_-_font-family,Arial,sans-serif)}
     ha-card{display:block;position:relative;background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:0;overflow:clip;padding-bottom:0}
     header{background:var(--app-header-background-color,var(--primary-color,#03a9f4));color:var(--primary-text-color,#222);display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:14px 12px 6px}.header-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap}h2{font-size:22px;font-weight:500;margin:0}.header-space{flex:1}header button{font-size:12px;min-height:36px;padding:5px 9px;border-radius:5px}h3{margin-top:0}
     button,input{font:inherit}button{cursor:pointer;border:1px solid var(--divider-color,#666);border-radius:7px;min-height:44px;padding:6px 12px;background:var(--secondary-background-color,#eee);color:var(--primary-text-color,#222)}button:disabled{cursor:default;opacity:.6}button:focus-visible,input:focus-visible{outline:3px solid var(--primary-color,#009edc);outline-offset:2px}
     .selected,.add,.enable{background:var(--green);color:white}.away,.disable,.days button:not(.selected){background:var(--disabled-text-color,#777);color:white}.remove{background:var(--red);color:white}.save{border:2px solid var(--green)}
+    .days button.enable{background:var(--green);color:white}
+    .days .disabled-day,.view-days .view-day.disabled-day{background:#000;color:#fff;position:relative}.disabled-day::after{content:'×';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#ff3030;font-size:38px;font-weight:300;line-height:1;pointer-events:none}
+    .sub-disabled-until{font-size:12px;color:var(--secondary-text-color,#666);margin:4px 0 8px}
     .day-box{border:2px solid var(--primary-text-color,#111);border-radius:6px;font-size:20px;font-weight:500;text-align:center;box-sizing:border-box;min-width:112px;margin:0;padding:2px 10px}
     header{position:sticky;top:var(--header-height,0px);z-index:5}
     section{position:relative;display:grid;grid-template-columns:354px minmax(0,1fr);gap:0;border-bottom:2px solid var(--primary-text-color,#111);padding:0;align-items:stretch}section::after{content:'';position:absolute;left:0;right:0;bottom:-2px;height:2px;background:var(--primary-text-color,#111);z-index:2;pointer-events:none}

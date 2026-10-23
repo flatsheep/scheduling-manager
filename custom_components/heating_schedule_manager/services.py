@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, Unauthorized
 
 from .const import DOMAIN
+from .controls import matches_path
 from .runtime import get_manager
 from .validation import Invalid
 
@@ -42,7 +43,7 @@ async def async_register(hass: HomeAssistant) -> None:
                 }
                 states = {key: state for key, state in states.items() if state["schedule_id"] in allowed}
             if path := call.data.get("path"):
-                state = next((state for state in states.values() if state["path"] == path), None)
+                state = next((state for state in states.values() if matches_path(state, path)), None)
                 if state is None:
                     raise Invalid(
                         "path", "Unknown or inaccessible control path; discover current paths with get_disabled"

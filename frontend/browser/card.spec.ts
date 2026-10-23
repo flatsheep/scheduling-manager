@@ -1,19 +1,92 @@
 import {test,expect,type Locator,type Page} from '@playwright/test';
 async function setTime(page:Page,endpoint:'Start'|'End',value:string){
+  const label=endpoint==='End'?'Stop':endpoint;
   const [hour,minute]=value.split(':');
-  await page.getByRole('combobox',{name:`${endpoint} hour`,exact:true}).selectOption(hour);
-  const select=page.getByRole('combobox',{name:`${endpoint} minute`,exact:true});
+  await page.getByRole('combobox',{name:`${label} hour`,exact:true}).selectOption(hour);
+  const select=page.getByRole('combobox',{name:`${label} minute`,exact:true});
   const choice=await select.locator(`option[value="${minute}"]`).count()?minute:String(Math.floor(Number(minute)/5)*5).padStart(2,'0');
   await select.selectOption(choice);
 }
 async function expectTime(page:Page,endpoint:'Start'|'End',value:string){
-  await expect.poll(async()=>`${await page.getByRole('combobox',{name:`${endpoint} hour`,exact:true}).inputValue()}:${await page.getByRole('combobox',{name:`${endpoint} minute`,exact:true}).inputValue()}`).toBe(value);
+  const label=endpoint==='End'?'Stop':endpoint;
+  await expect.poll(async()=>`${await page.getByRole('combobox',{name:`${label} hour`,exact:true}).inputValue()}:${await page.getByRole('combobox',{name:`${label} minute`,exact:true}).inputValue()}`).toBe(value);
 }
 async function enableAway(page:Page){await page.getByRole('button',{name:'Away',exact:true}).click();await page.getByRole('button',{name:'Enable Away',exact:true}).click();}
 async function pointAt(timeline:Locator,minute:number,y=70) {
   return timeline.locator('svg').evaluate((svg:SVGSVGElement,point)=>{const axis=svg.querySelector<SVGLineElement>('.axis')!;const screen=new DOMPoint(axis.x1.baseVal.value+point.minute/1440*(axis.x2.baseVal.value-axis.x1.baseVal.value),point.y).matrixTransform(svg.getScreenCTM()!);return{x:screen.x,y:screen.y};},{minute,y});
 }
 test.beforeEach(async({page})=>{await page.clock.install({time:new Date('2026-07-06T10:00:00Z')});await page.goto('/');await expect(page.getByRole('heading',{name:'Heating Schedule',exact:true})).toBeVisible();});
+test('sub-schedule disable modal isolates Apply until Save and persists day styling',async({page})=>{
+  await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();
+  await page.getByRole('button',{name:'Disable sub-schedule',exact:true}).click();
+  await expect(page.getByRole('combobox',{name:'Sub-schedule status',exact:true})).toHaveValue('enabled');
+  await page.getByRole('combobox',{name:'Sub-schedule status',exact:true}).selectOption('permanent');
+  await page.getByRole('button',{name:'Apply',exact:true}).click();
+  expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
+  expect(await page.evaluate(()=>(window as any).mock.saved.model.schedules[0].sub_schedules[0].enabled)).toBeUndefined();
+  const day=page.locator('.editing .days .selected').first();
+  await expect(day).toHaveCSS('background-color','rgb(0, 0, 0)');
+  await expect(day).toHaveCSS('color','rgb(255, 255, 255)');
+  expect(await day.evaluate(el=>getComputedStyle(el,'::after').content)).toBe('"×"');
+  expect(await day.evaluate(el=>getComputedStyle(el,'::after').color)).toBe('rgb(255, 48, 48)');
+  expect(await day.evaluate(el=>getComputedStyle(el,'::after').fontWeight)).toBe('300');
+  await expect(page.getByRole('button',{name:'Enable sub-schedule',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Enable sub-schedule',exact:true})).toHaveCSS('background-color','rgb(35, 173, 75)');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  const row=page.locator('section[aria-label="Schedule 1"]');
+  await expect(row.locator('.view-day.disabled-day').first()).toHaveCSS('background-color','rgb(0, 0, 0)');
+  await page.evaluate(()=>(window as any).mock.notify());
+  await expect(row.locator('.view-day.disabled-day').first()).toBeVisible();
+  await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();
+  await page.getByRole('button',{name:'Enable sub-schedule',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Disable sub-schedule',exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(1);
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await expect(row.locator('.disabled-day')).toHaveCount(0);
+});
+test('timed sub-schedule disable validates date, and draft Cancel does no write',async({page})=>{
+  await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();
+  await page.getByRole('button',{name:'Disable sub-schedule',exact:true}).click();
+  await page.getByRole('combobox',{name:'Sub-schedule status',exact:true}).selectOption('until');
+  await page.getByRole('button',{name:'Apply',exact:true}).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByLabel('Re-enable date and time',{exact:true}).fill('2026-07-06T14:00');
+  await page.getByRole('button',{name:'Apply',exact:true}).click();
+  expect(await page.locator('.editing hsm-timeline').evaluate((el:any)=>el.sub)).toMatchObject({enabled:false,disabled_until:'2026-07-06T14:00'});
+  await page.getByRole('button',{name:'Cancel',exact:true}).click();
+  await page.getByRole('button',{name:'Yes',exact:true}).click();
+  expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
+  await expect(page.locator('.disabled-day')).toHaveCount(0);
+});
+test('sub-schedule expiry updates saved day styling without writes or clearing band state',async({page})=>{
+  await page.evaluate(()=>{const mock=(window as any).mock,sub=mock.saved.model.schedules[0].sub_schedules[0];sub.enabled=false;sub.disabled_until='2026-07-06T10:01:00Z';sub.bands[0].enabled=false;mock.notify();});
+  const row=page.locator('section[aria-label="Schedule 1"]');
+  await expect(row.locator('.disabled-day').first()).toBeVisible();
+  await page.clock.runFor(61000);
+  await expect(row.locator('.disabled-day')).toHaveCount(0);
+  expect(await page.evaluate(()=>(window as any).mock.saved.model.schedules[0].sub_schedules[0].bands[0].enabled)).toBe(false);
+  expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
+});
+test('timed sub-schedule status appears below visible view days and Enable remains draft-only',async({page})=>{
+  await page.evaluate(()=>{const mock=(window as any).mock,sub=mock.saved.model.schedules[0].sub_schedules[0];sub.enabled=false;sub.disabled_until='2026-07-06T13:00:00Z';sub.bands[0].enabled=false;mock.notify();});
+  const row=page.locator('section[aria-label="Schedule 1"]');
+  const label=row.locator('.sub-disabled-until');
+  await expect(label).toHaveText('Disabled until Mon, 6 Jul, 14:00 BST');
+  expect(await label.evaluate(el=>el.previousElementSibling?.classList.contains('view-days'))).toBe(true);
+  await page.evaluate(()=>{const mock=(window as any).mock;mock.saved.model.schedules[0].enabled=false;mock.notify();});
+  await expect(label).toHaveCount(0);
+  await page.evaluate(()=>{const mock=(window as any).mock;mock.saved.model.schedules[0].enabled=true;mock.saved.model.away=true;mock.notify();});
+  await expect(label).toHaveCount(0);
+  await page.evaluate(()=>{const mock=(window as any).mock;mock.saved.model.away=false;mock.notify();});
+  await expect(label).toBeVisible();
+  await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();
+  await expect(label).toHaveCount(0);
+  await page.getByRole('button',{name:'Enable sub-schedule',exact:true}).click();
+  const draft=await page.locator('.editing hsm-timeline').evaluate((el:any)=>el.sub);
+  expect(draft.enabled).toBeUndefined();expect(draft.disabled_until).toBeUndefined();expect(draft.bands[0].enabled).toBe(false);
+  expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
+  expect(await page.evaluate(()=>(window as any).mock.saved.model.schedules[0].sub_schedules[0].enabled)).toBe(false);
+});
 test('new draft validates, edits, saves and Cancel does no write',async({page})=>{
   await page.getByRole('button',{name:'＋ Schedule',exact:true}).click();await page.getByRole('textbox',{name:'Schedule name'}).fill('Office heating');await page.getByRole('button',{name:'Apply',exact:true}).click();
   await expect(page.getByRole('button',{name:'Save',exact:true})).toBeDisabled();expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
@@ -153,11 +226,33 @@ test('short hold gap requests explicit shorter duration; drag cannot cross pair'
   expect(await timeline.evaluate((el:any)=>el.sub.bands[0].start_minute)).toBe(315);
 });
 test('sub-schedule popup selection, owned weekdays and draft deletion release',async({page})=>{
-  await page.getByRole('button',{name:'Edit Schedule 3',exact:true}).click();await expect(page.getByRole('button',{name:'Delete sub-schedule'})).toBeDisabled();
+  await page.getByRole('button',{name:'Edit Schedule 3',exact:true}).click();await expect(page.getByRole('button',{name:'Delete sub-schedule'})).toHaveCount(0);
   await page.getByRole('button',{name:'Add sub-schedule'}).click();await expect(page.getByRole('button',{name:'TUE',exact:true})).toBeDisabled();await page.getByRole('button',{name:'MON',exact:true}).click();
   await page.getByRole('combobox',{name:'Choose sub-schedule'}).selectOption('0');await expect(page.getByRole('button',{name:'MON',exact:true})).toBeDisabled();
   await page.getByRole('combobox',{name:'Choose sub-schedule'}).selectOption('1');await page.getByRole('button',{name:'Delete sub-schedule'}).click();await expect(page.getByRole('alertdialog')).not.toContainText(/draft/i);await page.getByRole('button',{name:'Yes',exact:true}).click();await expect(page.getByRole('button',{name:'MON',exact:true})).toBeEnabled();
   expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
+});
+test('unavailable sub-schedule controls are hidden and appear when usable',async({page})=>{
+  await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();
+  const add=page.getByRole('button',{name:'Add sub-schedule',exact:true});
+  const remove=page.getByRole('button',{name:'Delete sub-schedule',exact:true});
+  const selector=page.getByRole('combobox',{name:'Choose sub-schedule',exact:true});
+  await expect(add).toHaveCount(0);await expect(remove).toHaveCount(0);
+  await page.getByRole('button',{name:'SUN',exact:true}).click();
+  await expect(add).toBeEnabled();await add.click();
+  await expect(selector).toHaveValue('1');await expect(selector.locator('option')).toHaveCount(2);
+  await expect(remove).toBeEnabled();
+  await expect(remove.locator('svg.trash-icon')).toHaveCount(1);
+  await page.getByRole('button',{name:'SUN',exact:true}).click();
+  await expect(add).toHaveCount(0);
+  await remove.click();await expect(page.getByRole('alertdialog')).toBeVisible();
+  await page.getByRole('button',{name:'No',exact:true}).click();
+  await expect(selector.locator('option')).toHaveCount(2);
+  await remove.click();await page.getByRole('button',{name:'Yes',exact:true}).click();
+  await expect(selector.locator('option')).toHaveCount(1);await expect(remove).toHaveCount(0);
+  await expect(add).toBeEnabled();
+  expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
+  expect(await page.evaluate(()=>(window as any).mock.saved.model.schedules[0].sub_schedules[0].days)).toHaveLength(7);
 });
 test('touch scrolling cancels hold and does not create or drag a band',async({browser})=>{
   const context=await browser.newContext({viewport:{width:390,height:844},hasTouch:true});const phone=await context.newPage();await phone.clock.install({time:new Date('2026-07-06T10:00:00Z')});await phone.goto('/');await phone.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();
@@ -257,18 +352,18 @@ test('writable entities use independently editable start/end state choices',asyn
   await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();await page.getByRole('button',{name:'＋ Entity',exact:true}).click();
   await page.getByRole('textbox',{name:'Search entities'}).fill('sensor');await expect(page.locator('.choices button')).toHaveCount(0);
   await page.getByRole('textbox',{name:'Search entities'}).fill('Hall Light');await page.getByRole('button',{name:/Hall Light light.hall/}).click();
-  await expect(page.getByRole('combobox',{name:'Start state',exact:true})).toHaveValue('off');await expect(page.getByRole('combobox',{name:'End state',exact:true})).toHaveValue('off');
-  await page.getByRole('combobox',{name:'Start state',exact:true}).selectOption('off');await page.getByRole('combobox',{name:'End state',exact:true}).selectOption('on');await page.getByRole('button',{name:'Apply',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Start state for Hall Light',exact:true})).toHaveText('OFF');await expect(page.getByRole('button',{name:'End state for Hall Light',exact:true})).toHaveText('ON');
+  await expect(page.getByRole('combobox',{name:'Start state',exact:true})).toHaveValue('off');await expect(page.getByRole('combobox',{name:'Stop state',exact:true})).toHaveValue('off');
+  await page.getByRole('combobox',{name:'Start state',exact:true}).selectOption('off');await page.getByRole('combobox',{name:'Stop state',exact:true}).selectOption('on');await page.getByRole('button',{name:'Apply',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Start state for Hall Light',exact:true})).toHaveText('OFF');await expect(page.getByRole('button',{name:'Stop state for Hall Light',exact:true})).toHaveText('ON');
   await page.getByRole('button',{name:'Start state for Hall Light',exact:true}).click();await page.getByRole('combobox',{name:'Start state',exact:true}).selectOption('on');await page.getByRole('button',{name:'Apply',exact:true}).click();
   await page.getByRole('button',{name:'Save',exact:true}).click();const saved=await page.evaluate(()=>(window as any).mock.saved.model);const key=Object.keys(saved.entity_settings).find(k=>saved.entity_settings[k].entity_id==='light.hall')!;
   expect(saved.schedules[0].entities.find((m:any)=>m.entity_key===key)).toMatchObject({start_state:'on',end_state:'on'});expect(saved.entity_settings[key]).not.toHaveProperty('setback');
-  await page.getByRole('button',{name:'Edit Schedule 2',exact:true}).click();await page.getByRole('button',{name:'＋ Entity',exact:true}).click();await page.getByRole('textbox',{name:'Search entities'}).fill('Hall Light');await page.getByRole('button',{name:/Hall Light light.hall/}).click();await page.getByRole('combobox',{name:'Start state',exact:true}).selectOption('off');await page.getByRole('combobox',{name:'End state',exact:true}).selectOption('off');await page.getByRole('button',{name:'Apply',exact:true}).click();await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByRole('button',{name:'Edit Schedule 2',exact:true}).click();await page.getByRole('button',{name:'＋ Entity',exact:true}).click();await page.getByRole('textbox',{name:'Search entities'}).fill('Hall Light');await page.getByRole('button',{name:/Hall Light light.hall/}).click();await page.getByRole('combobox',{name:'Start state',exact:true}).selectOption('off');await page.getByRole('combobox',{name:'Stop state',exact:true}).selectOption('off');await page.getByRole('button',{name:'Apply',exact:true}).click();await page.getByRole('button',{name:'Save',exact:true}).click();
   const state=await page.evaluate(()=>(window as any).mock.saved.model);expect(state.schedules[0].entities.find((m:any)=>m.entity_key===key).end_state).toBe('on');expect(state.schedules[1].entities.find((m:any)=>m.entity_key===key).end_state).toBe('off');
 });
 test('multi-state selectors and Away participation follow Save/Cancel semantics',async({page})=>{
   await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();await page.getByRole('button',{name:'Schedule Away participation',exact:true}).click();await expect(page.getByRole('button',{name:'Schedule Away participation',exact:true})).toHaveText('Away excluded');
-  await page.getByRole('button',{name:'＋ Entity',exact:true}).click();await page.getByRole('textbox',{name:'Search entities'}).fill('Scene selector');await page.getByRole('button',{name:/Scene selector select.scene/}).click();await page.getByRole('combobox',{name:'Start state',exact:true}).selectOption('Focus');await page.getByRole('combobox',{name:'End state',exact:true}).selectOption('Relax');await page.getByRole('button',{name:'Apply',exact:true}).click();
+  await page.getByRole('button',{name:'＋ Entity',exact:true}).click();await page.getByRole('textbox',{name:'Search entities'}).fill('Scene selector');await page.getByRole('button',{name:/Scene selector select.scene/}).click();await page.getByRole('combobox',{name:'Start state',exact:true}).selectOption('Focus');await page.getByRole('combobox',{name:'Stop state',exact:true}).selectOption('Relax');await page.getByRole('button',{name:'Apply',exact:true}).click();
   expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);await page.getByRole('button',{name:'Save',exact:true}).click();
   await enableAway(page);await expect(page.locator('section[aria-label="Schedule 1"] hsm-timeline')).toBeVisible();await expect(page.locator('section[aria-label="Schedule 2"] .empty')).toHaveText('Away');
   await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();await page.getByRole('button',{name:'Schedule Away participation',exact:true}).click();await page.getByRole('button',{name:'Cancel',exact:true}).click();await page.getByRole('button',{name:'Yes',exact:true}).click();expect(await page.evaluate(()=>(window as any).mock.saved.model.schedules[0].away_enabled)).toBe(false);
@@ -276,8 +371,8 @@ test('multi-state selectors and Away participation follow Save/Cancel semantics'
 });
 test('numeric, text and date/time values use entity-specific editors',async({page})=>{
   await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();
-  await page.getByRole('button',{name:'＋ Entity',exact:true}).click();await page.getByRole('textbox',{name:'Search entities'}).fill('Level');await page.getByRole('button',{name:/Level number.level/}).click();await page.getByRole('spinbutton',{name:'Start state',exact:true}).fill('35');await page.getByRole('spinbutton',{name:'End state',exact:true}).fill('10');await page.getByRole('button',{name:'Apply',exact:true}).click();
-  await page.getByRole('button',{name:'＋ Entity',exact:true}).click();await page.getByRole('textbox',{name:'Search entities'}).fill('Message');await page.getByRole('button',{name:/Message text.message/}).click();await expect(page.getByRole('textbox',{name:'Start state',exact:true})).toHaveValue('Morning scene');await page.getByRole('textbox',{name:'End state',exact:true}).fill('');await page.getByRole('button',{name:'Apply',exact:true}).click();
+  await page.getByRole('button',{name:'＋ Entity',exact:true}).click();await page.getByRole('textbox',{name:'Search entities'}).fill('Level');await page.getByRole('button',{name:/Level number.level/}).click();await page.getByRole('spinbutton',{name:'Start state',exact:true}).fill('35');await page.getByRole('spinbutton',{name:'Stop state',exact:true}).fill('10');await page.getByRole('button',{name:'Apply',exact:true}).click();
+  await page.getByRole('button',{name:'＋ Entity',exact:true}).click();await page.getByRole('textbox',{name:'Search entities'}).fill('Message');await page.getByRole('button',{name:/Message text.message/}).click();await expect(page.getByRole('textbox',{name:'Start state',exact:true})).toHaveValue('Morning scene');await page.getByRole('textbox',{name:'Stop state',exact:true}).fill('');await page.getByRole('button',{name:'Apply',exact:true}).click();
   await page.getByRole('button',{name:'＋ Entity',exact:true}).click();await page.getByRole('textbox',{name:'Search entities'}).fill('Reminder');await page.getByRole('button',{name:/Reminder datetime.reminder/}).click();await expect(page.getByLabel('Start state',{exact:true})).toHaveValue('2026-07-06T11:00:30');await expect(page.getByLabel('Start state',{exact:true})).toHaveAttribute('step','1');await page.getByRole('button',{name:'Apply',exact:true}).click();
   await page.getByRole('button',{name:'Save',exact:true}).click();const saved=await page.evaluate(()=>(window as any).mock.saved.model);const lookup=(eid:string)=>{const key=Object.keys(saved.entity_settings).find(k=>saved.entity_settings[k].entity_id===eid);return saved.schedules[0].entities.find((m:any)=>m.entity_key===key);};
   expect(lookup('number.level')).toMatchObject({start_state:35,end_state:10});expect(lookup('text.message')).toMatchObject({start_state:'Morning scene',end_state:''});expect(lookup('datetime.reminder').start_state).toBe('2026-07-06T10:00:30+00:00');
@@ -286,13 +381,13 @@ test('overlapping arrows alternate foreground without opening or deleting a band
   await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();await page.getByRole('button',{name:'＋ Add time band'}).click();await setTime(page,'Start','06:00');await setTime(page,'End','06:05');await page.getByRole('button',{name:'Apply',exact:true}).click();
   const timeline=page.locator('.editing hsm-timeline');
   const point=await timeline.evaluate((el:any)=>{
-    const nodes=[...el.shadowRoot.querySelectorAll('g.marker')];const start=nodes.find((n:any)=>n.getAttribute('aria-label').startsWith('Target start 06:00'));const end=nodes.find((n:any)=>n.getAttribute('aria-label').startsWith('Setback end 06:05'));
+    const nodes=[...el.shadowRoot.querySelectorAll('g.marker')];const start=nodes.find((n:any)=>n.getAttribute('aria-label').startsWith('Target start 06:00'));const end=nodes.find((n:any)=>n.getAttribute('aria-label').startsWith('Setback stop 06:05'));
     const a=start.querySelector('.hit-area').getBoundingClientRect(),b=end.querySelector('.hit-area').getBoundingClientRect();
     return {x:(Math.max(a.left,b.left)+Math.min(a.right,b.right))/2,y:(Math.max(a.top,b.top)+Math.min(a.bottom,b.bottom))/2};
   });
-  await page.mouse.click(point.x,point.y);await expect(timeline.locator('.marker.selected')).toHaveAttribute('aria-label',/^Setback end 06:05/);
+  await page.mouse.click(point.x,point.y);await expect(timeline.locator('.marker.selected')).toHaveAttribute('aria-label',/^Setback stop 06:05/);
   await page.mouse.click(point.x,point.y);await expect(timeline.locator('.marker.selected')).toHaveAttribute('aria-label',/^Target start 06:00/);
-  await page.mouse.click(point.x,point.y);await expect(timeline.locator('.marker.selected')).toHaveAttribute('aria-label',/^Setback end 06:05/);
+  await page.mouse.click(point.x,point.y);await expect(timeline.locator('.marker.selected')).toHaveAttribute('aria-label',/^Setback stop 06:05/);
   await page.clock.runFor(400);await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByRole('alertdialog')).toHaveCount(0);
   expect(await timeline.evaluate((el:any)=>el.shadowRoot.querySelectorAll('g.marker')[el.shadowRoot.querySelectorAll('g.marker').length-1].classList.contains('selected'))).toBe(true);
   expect(await timeline.evaluate((el:any)=>el.sub.bands.length)).toBe(3);
@@ -308,7 +403,7 @@ test('view-mode overlapping markers can be selected without altering saved value
 });
 test('entity rows present orange start/target first and blue end/setback last',async({page})=>{
   const row=page.locator('section[aria-label="Schedule 1"] .entity').first();await expect(row.locator('button').first()).toHaveClass('target');await expect(row.locator('button').nth(1)).toHaveClass('setback');
-  await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();await page.getByRole('button',{name:'＋ Entity',exact:true}).click();await page.getByRole('textbox',{name:'Search entities'}).fill('Hall Light');await page.getByRole('button',{name:/Hall Light light.hall/}).click();await page.getByRole('combobox',{name:'Start state',exact:true}).selectOption('on');await page.getByRole('combobox',{name:'End state',exact:true}).selectOption('off');await page.getByRole('button',{name:'Apply',exact:true}).click();
+  await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();await page.getByRole('button',{name:'＋ Entity',exact:true}).click();await page.getByRole('textbox',{name:'Search entities'}).fill('Hall Light');await page.getByRole('button',{name:/Hall Light light.hall/}).click();await page.getByRole('combobox',{name:'Start state',exact:true}).selectOption('on');await page.getByRole('combobox',{name:'Stop state',exact:true}).selectOption('off');await page.getByRole('button',{name:'Apply',exact:true}).click();
   const stateRow=page.locator('.editing .entity').last();await expect(stateRow.locator('button').first()).toHaveText('ON');await expect(stateRow.locator('button').first()).toHaveClass('target');await expect(stateRow.locator('button').nth(1)).toHaveText('OFF');await expect(stateRow.locator('button').nth(1)).toHaveClass('setback');
 });
 test('category creation and assignment commit on Save and unused categories disappear',async({page})=>{
@@ -458,7 +553,7 @@ test('blank timeline double-click creates one hour without a popup and respects 
 test('time-band editor is compact with lower-right trash and keeps editing after No',async({page})=>{
   await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();const timeline=page.locator('.editing hsm-timeline');await timeline.getByRole('button',{name:/Target start 12:00/}).focus();await page.keyboard.press('Enter');
   const dialog=page.getByRole('dialog'),trash=page.getByRole('button',{name:'Delete time band',exact:true});await expect(trash.locator('svg')).toHaveCount(1);await expect(dialog.getByRole('button',{name:'Delete band…',exact:true})).toHaveCount(0);
-  const d=(await dialog.boundingBox())!,bin=(await trash.boundingBox())!,end=(await page.getByLabel('End time',{exact:true}).boundingBox())!;expect(d.width).toBeLessThanOrEqual(300);expect(bin.x+bin.width).toBeGreaterThan(d.x+d.width-25);expect(bin.y).toBeGreaterThan(end.y+end.height+20);
+  const d=(await dialog.boundingBox())!,bin=(await trash.boundingBox())!,end=(await page.getByLabel('Stop time',{exact:true}).boundingBox())!;expect(d.width).toBeLessThanOrEqual(300);expect(bin.x+bin.width).toBeGreaterThan(d.x+d.width-25);expect(bin.y).toBeGreaterThan(end.y+end.height+20);
   await page.screenshot({path:'../artifacts/compact-time-band-popup.png',fullPage:true});await trash.click();await page.getByRole('button',{name:'No',exact:true}).click();await expect(dialog).toBeVisible();expect(await timeline.evaluate((el:any)=>el.sub.bands.length)).toBe(2);
   await trash.click();await page.getByRole('button',{name:'Yes',exact:true}).click();await expect(dialog).toHaveCount(0);expect(await timeline.evaluate((el:any)=>el.sub.bands.length)).toBe(1);expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
   const add=(await page.getByRole('button',{name:'＋ Add time band'}).boundingBox())!,strip=(await page.locator('section.editing').boundingBox())!;expect(strip.y+strip.height-add.y-add.height).toBeGreaterThanOrEqual(8);
@@ -502,7 +597,7 @@ test('five-minute time selectors and solar endpoint popup preserve transactions 
   await expect(page.getByRole('combobox',{name:'Start minute',exact:true}).locator('option')).toHaveText(['00','05','10','15','20','25','30','35','40','45','50','55']);await expectTime(page,'End','13:00');
   await page.getByRole('checkbox',{name:'Start solar event',exact:true}).check();await expect(page.getByLabel('Start time',{exact:true})).toHaveCount(0);await expect(page.getByRole('combobox',{name:'Start solar event'}).locator('option')).toHaveCount(6);await expect(page.getByLabel('Start offset minutes')).toHaveValue('0');
   await page.getByRole('combobox',{name:'Start solar event'}).selectOption('sunrise');await page.getByLabel('Start offset minutes').fill('-17');
-  await page.getByRole('checkbox',{name:'End solar event',exact:true}).check();await page.getByRole('combobox',{name:'End solar event'}).selectOption('sunset');await page.getByLabel('End offset minutes').fill('30');
+  await page.getByRole('checkbox',{name:'Stop solar event',exact:true}).check();await page.getByRole('combobox',{name:'Stop solar event'}).selectOption('sunset');await page.getByLabel('Stop offset minutes').fill('30');
   await page.screenshot({path:'../artifacts/dynamic-time-band-popup.png',fullPage:true});await page.getByRole('button',{name:'Apply',exact:true}).click();
   const timeline=page.locator('.editing hsm-timeline');await expect(timeline.locator('.marker text')).toContainText(['02:00','05:20','12:00','16:00','04:43 *','21:30 *']);expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
   await timeline.getByRole('button',{name:/Target start 04:43/}).click();await expect(page.getByRole('checkbox',{name:'Start solar event'})).toBeChecked();await page.getByLabel('Start offset minutes').fill('100');await page.getByRole('dialog').getByRole('button',{name:'Cancel',exact:true}).click();
@@ -523,7 +618,7 @@ test.describe('touch dynamic time editor',()=>{
   test('touch band opens five-minute selectors and dynamic controls without page overflow',async({page})=>{
     await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).tap();const timeline=page.locator('.editing hsm-timeline');await timeline.scrollIntoViewIfNeeded();
     await timeline.locator('.band-hit').first().tap();await page.clock.runFor(400);await expect(page.getByRole('combobox',{name:'Start minute',exact:true})).toBeVisible();
-    await page.getByRole('checkbox',{name:'End solar event'}).check();await page.getByRole('combobox',{name:'End solar event'}).selectOption('dawn');await page.getByLabel('End offset minutes').fill('300');
+    await page.getByRole('checkbox',{name:'Stop solar event'}).check();await page.getByRole('combobox',{name:'Stop solar event'}).selectOption('dawn');await page.getByLabel('Stop offset minutes').fill('300');
     await page.screenshot({path:'../artifacts/dynamic-time-band-phone.png',fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await page.getByRole('button',{name:'Apply',exact:true}).tap();await expect(timeline.locator('.marker text')).toContainText(['09:20 *']);expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
   });
@@ -547,10 +642,10 @@ test('solar event replaces the fixed picker and popup previews update with offse
   await page.getByRole('checkbox',{name:'Start solar event'}).check();const event=(await page.getByRole('combobox',{name:'Start solar event'}).boundingBox())!,after=(await dialog.boundingBox())!;
   expect(event.x-after.x).toBeCloseTo(input.x-before.x,1);expect(event.y-after.y).toBeCloseTo(input.y-before.y,1);expect(event.width).toBeCloseTo(input.width,1);
   await expect(page.getByLabel('Start resolved time')).toHaveText('05:00 *');await page.getByLabel('Start offset minutes').fill('-17');await expect(page.getByLabel('Start resolved time')).toHaveText('04:43 *');
-  await page.getByRole('checkbox',{name:'End solar event'}).check();await expect(page.getByLabel('End resolved time')).toHaveText('21:00 *');await page.getByLabel('End offset minutes').fill('30');await expect(page.getByLabel('End resolved time')).toHaveText('21:30 *');
-  await page.getByRole('combobox',{name:'Start solar event'}).selectOption('sunset');await expect(page.getByLabel('Start resolved time')).toHaveText('20:43 *');await page.getByLabel('Start offset minutes').fill('300');await expect(page.getByLabel('Start resolved time')).toHaveText('02:00 * (next day)');await expect(page.getByLabel('Start band time')).toHaveText('Band time: 23:59 *');await expect(page.getByLabel('End band time')).toHaveText('Band time: 23:59 *');
-  await page.getByRole('checkbox',{name:'End solar event'}).uncheck();await page.getByRole('combobox',{name:'End hour',exact:true}).selectOption('14');await expect(page.getByLabel('Start resolved time')).toHaveText('02:00 * (next day)');await expectTime(page,'End','23:59');await expect(page.getByLabel('End band time')).toHaveText('Band time: 23:59');await expect(dialog.locator('.band-preview-date')).toHaveText('Times for 2026-07-06');
-  await page.getByLabel('Start offset minutes').fill('0');await expect(page.getByLabel('Start resolved time')).toHaveText('21:00 *');await page.getByLabel('Start offset minutes').fill('15');await expect(page.getByLabel('Start resolved time')).toHaveText('21:15 *');await expect(page.getByLabel('Start band time')).toHaveCount(0);await expect(page.getByLabel('End band time')).toHaveText('Band time: 21:15');await expect(dialog.getByText('End matches start',{exact:true})).toBeVisible();
+  await page.getByRole('checkbox',{name:'Stop solar event'}).check();await expect(page.getByLabel('Stop resolved time')).toHaveText('21:00 *');await page.getByLabel('Stop offset minutes').fill('30');await expect(page.getByLabel('Stop resolved time')).toHaveText('21:30 *');
+  await page.getByRole('combobox',{name:'Start solar event'}).selectOption('sunset');await expect(page.getByLabel('Start resolved time')).toHaveText('20:43 *');await page.getByLabel('Start offset minutes').fill('300');await expect(page.getByLabel('Start resolved time')).toHaveText('02:00 * (next day)');await expect(page.getByLabel('Start band time')).toHaveText('Band time: 23:59 *');await expect(page.getByLabel('Stop band time')).toHaveText('Band time: 23:59 *');
+  await page.getByRole('checkbox',{name:'Stop solar event'}).uncheck();await page.getByRole('combobox',{name:'Stop hour',exact:true}).selectOption('14');await expect(page.getByLabel('Start resolved time')).toHaveText('02:00 * (next day)');await expectTime(page,'End','23:59');await expect(page.getByLabel('Stop band time')).toHaveText('Band time: 23:59');await expect(dialog.locator('.band-preview-date')).toHaveText('Times for 2026-07-06');
+  await page.getByLabel('Start offset minutes').fill('0');await expect(page.getByLabel('Start resolved time')).toHaveText('21:00 *');await page.getByLabel('Start offset minutes').fill('15');await expect(page.getByLabel('Start resolved time')).toHaveText('21:15 *');await expect(page.getByLabel('Start band time')).toHaveCount(0);await expect(page.getByLabel('Stop band time')).toHaveText('Band time: 21:15');await expect(dialog.getByText('Stop matches start',{exact:true})).toBeVisible();
   await page.getByRole('combobox',{name:'Start solar event'}).selectOption('midnight');await page.getByLabel('Start offset minutes').fill('-300');await expect(page.getByLabel('Start resolved time')).toHaveText('20:00 * (previous day)');await expect(page.getByLabel('Start band time')).toHaveText('Band time: 00:00 *');
   await page.getByRole('combobox',{name:'Start solar event'}).selectOption('sunset');await page.getByLabel('Start offset minutes').fill('15');
   await page.screenshot({path:'../artifacts/dynamic-time-band-preview-popup.png',fullPage:true});expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
@@ -561,7 +656,7 @@ test('only the solar endpoint is locked and fixed End clamps to resolved solar S
   await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();const timeline=page.locator('.editing hsm-timeline');await timeline.getByRole('button',{name:/Target start 12:00/}).focus();await page.keyboard.press('Enter');await page.getByRole('checkbox',{name:'Start solar event'}).check();await page.getByRole('combobox',{name:'Start solar event'}).selectOption('noon');await page.getByRole('button',{name:'Apply',exact:true}).click();
   const before=await timeline.evaluate((el:any)=>structuredClone(el.sub));
   const solar=timeline.getByRole('button',{name:/Target start 13:00/}),box=(await solar.locator('.hit-area').boundingBox())!,path=await solar.locator('path').getAttribute('d');await page.mouse.move(box.x+box.width/2,box.y+20);await page.mouse.down();await page.mouse.move(box.x+box.width/2+100,box.y+20,{steps:8});await page.mouse.up();await expect(solar.locator('path')).toHaveAttribute('d',path!);
-  const fixed=timeline.getByRole('button',{name:/Setback end 16:00/}),end=(await fixed.locator('.hit-area').boundingBox())!,target=await pointAt(timeline,400,70);await page.mouse.move(end.x+end.width/2,end.y+20);await page.mouse.down();await page.mouse.move(target.x,target.y,{steps:8});await page.mouse.up();
+  const fixed=timeline.getByRole('button',{name:/Setback stop 16:00/}),end=(await fixed.locator('.hit-area').boundingBox())!,target=await pointAt(timeline,400,70);await page.mouse.move(end.x+end.width/2,end.y+20);await page.mouse.down();await page.mouse.move(target.x,target.y,{steps:8});await page.mouse.up();
   expect(await timeline.evaluate((el:any)=>el.sub.bands[1].end_minute)).toBe(780);expect(await timeline.evaluate((el:any)=>el.sub.bands[1].start_dynamic)).toEqual(before.bands[1].start_dynamic);await expect(page.getByRole('dialog')).toHaveCount(0);expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
 });
 
@@ -570,18 +665,18 @@ test('popup End selectors follow Start and immediately clamp earlier selections'
   await expectTime(page,'End','21:00');await setTime(page,'End','12:00');await expectTime(page,'End','21:00');
   await page.getByLabel('Start offset minutes').fill('15');await expectTime(page,'End','21:15');await setTime(page,'End','21:00');await expectTime(page,'End','21:15');
   await setTime(page,'End','22:00');await expectTime(page,'End','22:00');await page.getByLabel('Start offset minutes').fill('90');await expectTime(page,'End','22:30');
-  await page.getByRole('combobox',{name:'Start solar event'}).selectOption('sunrise');await page.getByLabel('Start offset minutes').fill('1');await setTime(page,'End','05:01');await expectTime(page,'End','05:01');await expect(page.getByRole('combobox',{name:'End minute',exact:true}).locator('option[value="01"]')).toHaveCount(1);
+  await page.getByRole('combobox',{name:'Start solar event'}).selectOption('sunrise');await page.getByLabel('Start offset minutes').fill('1');await setTime(page,'End','05:01');await expectTime(page,'End','05:01');await expect(page.getByRole('combobox',{name:'Stop minute',exact:true}).locator('option[value="01"]')).toHaveCount(1);
   await page.screenshot({path:'../artifacts/popup-end-time-limited.png',fullPage:true});await page.getByRole('button',{name:'Apply',exact:true}).click();const timeline=page.locator('.editing hsm-timeline');await expect(timeline.locator('.marker.start text')).toContainText(['05:01 *']);await expect(timeline.locator('.marker.end text')).toContainText(['05:01']);expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
 });
 
 test('fixed-only popup End selectors preserve minimum five-minute duration on Apply',async({page})=>{
-  await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();const timeline=page.locator('.editing hsm-timeline');await timeline.getByRole('button',{name:/Target start 02:00/}).focus();await page.keyboard.press('Enter');await setTime(page,'Start','06:00');await expectTime(page,'End','06:05');await setTime(page,'End','03:00');await expectTime(page,'End','06:05');await expect(page.getByRole('combobox',{name:'End minute',exact:true}).locator('option[value="02"]')).toHaveCount(0);await setTime(page,'End','06:00');await expectTime(page,'End','06:05');await page.getByRole('button',{name:'Apply',exact:true}).click();await expect(timeline.locator('.marker.start text')).toContainText(['06:00']);await expect(timeline.locator('.marker.end text')).toContainText(['06:05']);expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
+  await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();const timeline=page.locator('.editing hsm-timeline');await timeline.getByRole('button',{name:/Target start 02:00/}).focus();await page.keyboard.press('Enter');await setTime(page,'Start','06:00');await expectTime(page,'End','06:05');await setTime(page,'End','03:00');await expectTime(page,'End','06:05');await expect(page.getByRole('combobox',{name:'Stop minute',exact:true}).locator('option[value="02"]')).toHaveCount(0);await setTime(page,'End','06:00');await expectTime(page,'End','06:05');await page.getByRole('button',{name:'Apply',exact:true}).click();await expect(timeline.locator('.marker.start text')).toContainText(['06:00']);await expect(timeline.locator('.marker.end text')).toContainText(['06:05']);expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
 });
 
 test('fixed bands cannot drag across resolved solar neighbours',async({page})=>{
   await page.evaluate(()=>{const m=(window as any).mock,sub=m.saved.model.schedules[0].sub_schedules[0];sub.bands[0].end_minute=240;sub.bands.push({id:crypto.randomUUID(),start_minute:1200,end_minute:1260,start_dynamic:{event:'sunrise',offset:1},end_dynamic:{event:'sunrise',offset:61}});m.notify();});
   await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();const timeline=page.locator('.editing hsm-timeline');
-  for(const [name,target] of [[/Setback end 04:00/,600],[/Target start 12:00/,120]] as const){const marker=timeline.getByRole('button',{name}),box=(await marker.locator('.hit-area').boundingBox())!,point=await pointAt(timeline,target,70);await page.mouse.move(box.x+box.width/2,box.y+20);await page.mouse.down();await page.mouse.move(point.x,point.y,{steps:8});await page.mouse.up();}
+  for(const [name,target] of [[/Setback stop 04:00/,600],[/Target start 12:00/,120]] as const){const marker=timeline.getByRole('button',{name}),box=(await marker.locator('.hit-area').boundingBox())!,point=await pointAt(timeline,target,70);await page.mouse.move(box.x+box.width/2,box.y+20);await page.mouse.down();await page.mouse.move(point.x,point.y,{steps:8});await page.mouse.up();}
   expect(await timeline.evaluate((el:any)=>el.sub.bands.slice(0,2).map((b:any)=>[b.start_minute,b.end_minute]))).toEqual([[120,300],[365,960]]);await expect(timeline.locator('.marker text')).toContainText(['05:01 *','06:01 *']);expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
 });
 

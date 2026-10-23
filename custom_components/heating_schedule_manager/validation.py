@@ -151,6 +151,15 @@ def validate(model, capabilities):
         days: set[int] = set()
         for si, sub in enumerate(subs):
             sp = f"{path}.sub_schedules[{si}]"
+            require(type(sub.get("enabled", True)) is bool, sp + ".enabled", "Expected boolean")
+            if sub.get("disabled_until") is not None:
+                require(not sub.get("enabled", True), sp + ".disabled_until", "A disabled-until time requires a disabled sub-schedule")
+                try:
+                    sub["disabled_until"] = away_time(sub["disabled_until"]).isoformat()
+                except Invalid as err:
+                    raise Invalid(sp + ".disabled_until", str(err)) from None
+            else:
+                sub.pop("disabled_until", None)
             name = sub.get("name", "")
             require(isinstance(name, str), sp + ".name", "Expected a name string")
             if name.strip():
@@ -164,7 +173,7 @@ def validate(model, capabilities):
             days.update(selected)
             sub["days"] = sorted(selected)
             bands = sub.get("bands")
-            require(isinstance(bands, list) and 1 <= len(bands) <= 10, sp + ".bands", "Add one to ten bands")
+            require(isinstance(bands, list) and 0 <= len(bands) <= 10, sp + ".bands", "Use at most ten bands")
             require(all(isinstance(b, dict) and type(b.get("start_minute")) is int for b in bands), sp + ".bands", "Invalid bands")
             previous = 0
             for band in sorted(bands, key=lambda b: b.get("start_minute", -1)):
@@ -172,6 +181,10 @@ def validate(model, capabilities):
                 require(band["id"] not in seen, sp, "Duplicate ID")
                 seen.add(band["id"])
                 bp = sp + ".band"
+                require(type(band.get("one_off", False)) is bool, bp + ".one_off", "Expected boolean")
+                if band.get("one_off"):
+                    require(band.get("enabled", True) is True and band.get("disabled_until") is None,
+                            bp, "One-off bands cannot be disabled individually")
                 require(type(band.get("enabled", True)) is bool, bp + ".enabled", "Expected boolean")
                 if band.get("disabled_until") is not None:
                     require(not band.get("enabled", True), bp + ".disabled_until", "A disabled-until time requires a disabled band")

@@ -8,7 +8,7 @@ set_disabled:
   fields:
     path:
       required: true
-      example: schedule_manager.schedule1.weekdays.band-on-0700-off-1000.disabled
+      example: schedule_manager.schedule1.weekdays.band-start-0700-stop-1000.disabled
       selector:
         text:
     disabled:

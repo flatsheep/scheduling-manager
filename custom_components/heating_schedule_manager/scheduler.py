@@ -18,11 +18,12 @@ from homeassistant.util import dt as dt_util
 from .capabilities import read_capabilities, cache_valid
 from .actions import state_action
 from .const import DOMAIN, SIGNAL, VERSION
-from .events import band_active, compile_events, section_active
+from .events import band_active, compile_events, section_active, wall_instant
 from .bands import band_disabled
-from .controls import control_states
+from .controls import control_states, matches_path
 from .dynamic import SOLAR_EVENTS, SolarTimes
 from .storage import inspect_store
+from . import one_off
 from .validation import Invalid, away_time, identifier, require, temperature, validate
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,7 +61,8 @@ def execution_section(section):
     return {"entities": section["entities"],
             "enabled": section.get("enabled", True),
             "away_enabled": section.get("away_enabled", True),
-            "sub_schedules": [{field: sub[field] for field in ("id", "days", "bands")}
+            "sub_schedules": [{**{field: sub[field] for field in ("id", "days", "bands")},
+                               "enabled": sub.get("enabled", True), "disabled_until": sub.get("disabled_until")}
                               for sub in section["sub_schedules"]]}
 
 
@@ -151,10 +153,18 @@ class Manager:
 
     def public(self) -> dict[str, Any]:
         now = dt_util.utcnow()
+        upcoming = compile_events(self.model, self.hass.config.time_zone, now, now + timedelta(days=8), self.solar) if any(one_off.bands(self.model)) else []
+        one_off_status = {}
+        for _, _, band in one_off.bands(self.model):
+            run = band.get("one_off_run")
+            event = next((e for e in upcoming if e.band_id == band["id"]), None)
+            one_off_status[band["id"]] = {"status": ("Stop pending" if run.get("end_recorded") else "Running") if run else "Waiting",
+                                         "start": run["start"] if run else event.one_off["start"] if event else None,
+                                         "end": run["end"] if run else event.one_off["end"] if event else None}
         today = now.astimezone(ZoneInfo(self.hass.config.time_zone)).date()
         solar_times = {str(day): {event: self.solar(day, event) for event in SOLAR_EVENTS}
                        for day in (today + timedelta(days=i) for i in range(8))}
-        return {"model": deepcopy(self.model), "timezone": self.hass.config.time_zone,
+        return {"model": deepcopy(self.model), "timezone": self.hass.config.time_zone, "one_off_status": one_off_status,
                  "solar_times": solar_times,
                 "active_schedules": {section["id"]: not away_for(self.model, section) and
                                      section_active(section, self.hass.config.time_zone, now, self.solar)
@@ -240,13 +250,15 @@ class Manager:
             when = min(when, max(now, away_time(deadline)))
         for section in self.model["schedules"]:
             for sub in section["sub_schedules"]:
-                for band in sub["bands"]:
+                for band in [sub, *sub["bands"]]:
                     if not band.get("enabled", True) and band.get("disabled_until"):
                         expiry = away_time(band["disabled_until"])
                         if expiry > now:
                             when = min(when, expiry)
         if self.storage_error and when <= now:
             when = now + timedelta(seconds=60)
+        if self.storage_error and any(one_off.bands(self.model)):
+            when = min(when, now + timedelta(seconds=60))
         token = self.generation
 
         @callback
@@ -276,7 +288,8 @@ class Manager:
 
     def _cancel_source_pending(self, candidate, source, keys=None):
         runtime = candidate["runtime"]
-        removed = {k for k, c in runtime["pending"].items() if c.get("source") == source and (keys is None or k in keys)}
+        removed = {k for k, c in runtime["pending"].items() if c.get("source") == source and (keys is None or k in keys)
+                   and not (c.get("one_off_id") and c.get("endpoint") == "end")}
         for key in removed:
             runtime["pending"].pop(key, None)
             runtime["errors"].pop(key, None)
@@ -293,25 +306,33 @@ class Manager:
             self._cancel_source_pending(candidate, source, {key for key in runtime["pending"] if not climate(candidate["model"], key)})
         batches = []
         for event in events:
+            if event.one_off and event.section["id"] in skip_all_sources and not any(
+                    b["id"] == event.band_id and b.get("one_off_run") for _, _, b in one_off.bands(candidate["model"])):
+                continue
+            one_off.record(candidate, event)
+            event_model = {**value_model, "entity_settings": event.one_off["settings"]} if event.one_off else value_model
+            cleanup = bool(event.one_off and event.endpoint == "end")
             for member in event.section["entities"]:
                 key = member["entity_key"]
                 if key not in candidate["model"]["entity_settings"]:
                     continue
-                normal = member_value(value_model, member, event.endpoint)
+                normal = member_value(event_model, member, event.endpoint)
                 unit = member_unit(member, event.endpoint)
                 self._normal(candidate, key, normal, event.section["id"], occurrence=event.occurrence, **({"state_unit": unit} if unit is not None else {}))
-                if away_for(value_model, event.section) or event.section["id"] in skip_all_sources or (event.section["id"] in skip_state_sources and not climate(candidate["model"], key)):
+                if not cleanup and (away_for(value_model, event.section) or event.section["id"] in skip_all_sources or (event.section["id"] in skip_state_sources and not climate(candidate["model"], key))):
                     # Away suspends every normal endpoint, retaining logical
                     # progress without repeating climate setback commands.
                     self._cancel_source_pending(candidate, event.section["id"], {key})
                     runtime["sequence"] += 1
                     continue
-                desired = value_model["entity_settings"][key]["setback"] if away_for(value_model, event.section) else normal
+                desired = value_model["entity_settings"][key]["setback"] if away_for(value_model, event.section) and climate(value_model, key) else normal
                 self._desired(candidate, key, desired, event.section["id"], unit)
+                if event.one_off:
+                    runtime["pending"][key].update(one_off_id=event.band_id, endpoint=event.endpoint)
                 batches.append((key, deepcopy(runtime["pending"][key]), event))
         return batches
 
-    async def _advance(self, now, skip_state_sources=frozenset(), skip_all_sources=frozenset()):
+    async def _advance(self, now, skip_state_sources=frozenset(), skip_all_sources=frozenset(), skip_one_off_ids=frozenset()):
         await self._expire_away(now)
         candidate = deepcopy(self.snapshot)
         runtime = candidate["runtime"]
@@ -319,6 +340,7 @@ class Manager:
         if now <= cursor:
             return
         events = compile_events(candidate["model"], runtime["zone"], cursor, now, self.solar)
+        events = [event for event in events if event.band_id not in skip_one_off_ids]
         # Ordinary same-instant batches retain each command, except DST collapse.
         # Late timers/downtime coalesce to each entity's final desired command.
         live = events and (now - events[0].instant).total_seconds() < 2
@@ -333,7 +355,7 @@ class Manager:
                 for key, command, _ in batches:
                     await self._send(key, command)
                 return
-        await self._drain()
+        await self._drain(skip_one_off_ids=skip_one_off_ids)
 
     async def tick(self, token=None):
         async with self.lock:
@@ -343,6 +365,7 @@ class Manager:
                 await self._advance(dt_util.utcnow())
                 # Also recovers work journalled just before a crash.
                 await self._drain()
+                await self._finish_one_off()
             except Exception:
                 _LOGGER.exception("Scheduler persistence/dispatch failed")
             finally:
@@ -355,7 +378,8 @@ class Manager:
             return
         eid = setting["entity_id"]
         source = next((s for s in self.model["schedules"] if s["id"] == command.get("source")), None)
-        if source and away_for(self.model, source) and not climate(self.model, key):
+        cleanup = command.get("one_off_id") and command.get("endpoint") == "end"
+        if source and away_for(self.model, source) and not climate(self.model, key) and not cleanup:
             candidate = deepcopy(self.snapshot)
             self._cancel_source_pending(candidate, source["id"], {key})
             await self._persist(candidate)
@@ -395,13 +419,26 @@ class Manager:
                 runtime["pending"].pop(key)
         await self._persist(candidate)
 
-    async def _drain(self, only=None):
+    async def _drain(self, only=None, skip_one_off_ids=frozenset()):
         for key, command in list(self.snapshot["runtime"]["pending"].items()):
+            if command.get("one_off_id") in skip_one_off_ids:
+                continue
             if only is None or key in only:
                 # Pending errors are retried only on availability recovery or an
                 # explicit newer event. No periodic enforcement or retry loop.
                 if only is not None or key not in self.snapshot["runtime"]["errors"]:
                     await self._send(key, command)
+        await self._finish_one_off()
+
+    async def _finish_one_off(self):
+        if not any(one_off.bands(self.model)):
+            return
+        candidate = deepcopy(self.snapshot)
+        if one_off.finish(candidate):
+            await self._persist(candidate)
+            self.generation += 1
+            self._arm()
+            self._notify()
 
     async def _dispatch_committed(self):
         try:
@@ -440,6 +477,11 @@ class Manager:
             identifier(section_id, "section_id")
             require(type(expected_revision) is int, "revision", "Expected integer revision")
             require(expected_revision == self.model["revision"], "revision", "Conflict: reload saved state; your unsaved changes are retained")
+            cancelled_one_off = one_off.edited_ids(self.model, section_id, section if operation == "upsert" else None)
+            if any(one_off.bands(self.model)):
+                await self._advance(dt_util.utcnow(), skip_one_off_ids=cancelled_one_off)
+                await self._finish_one_off()
+                require(expected_revision == self.model["revision"], "revision", "Conflict: reload saved state; your unsaved changes are retained")
             require(operation in ("upsert", "delete"), "operation", "Use upsert or delete")
             candidate = deepcopy(self.snapshot)
             model = candidate["model"]
@@ -455,22 +497,29 @@ class Manager:
                 require(section.get("enabled", current_enabled) == current_enabled, "section.enabled", "Use the Enable/Disable control to change this state")
                 section = deepcopy({**section, "enabled": current_enabled})
                 old_bands = {b["id"]: b for s in (model["schedules"][index]["sub_schedules"] if index is not None else []) for b in s["bands"]}
+                old_subs = {s["id"]: s for s in (model["schedules"][index]["sub_schedules"] if index is not None else [])}
                 require(isinstance(section.get("sub_schedules"), list), "section.sub_schedules", "Invalid sub-schedules")
                 for sub in section.get("sub_schedules", []):
                     if not isinstance(sub, dict):
                         continue
                     require(isinstance(sub.get("bands"), list), "section.bands", "Invalid bands")
-                    for band in sub.get("bands", []):
+                    for band in [sub, *sub.get("bands", [])]:
                         if not isinstance(band, dict) or band.get("disabled_until") is None:
                             continue
                         identifier(band.get("id"), "band.id")
-                        old_deadline = old_bands.get(band.get("id"), {}).get("disabled_until")
+                        old_deadline = {**old_subs, **old_bands}.get(band.get("id"), {}).get("disabled_until")
                         if band["disabled_until"] != old_deadline:
                             try:
-                                band["disabled_until"] = away_time(band["disabled_until"], self.hass.config.time_zone, dt_util.utcnow()).isoformat()
+                                deadline = away_time(band["disabled_until"], self.hass.config.time_zone)
+                                # Equivalent ISO spellings are still the same saved
+                                # deadline, including after expiry on metadata edits.
+                                if old_deadline is None or deadline != away_time(old_deadline):
+                                    deadline = away_time(band["disabled_until"], self.hass.config.time_zone, dt_util.utcnow())
+                                band["disabled_until"] = deadline.isoformat()
                             except Invalid as err:
                                 raise Invalid("band.disabled_until", str(err)) from None
                 require(isinstance(section.get("entities"), list) and all(isinstance(m, dict) and isinstance(m.get("entity_key"), str) for m in section["entities"]), "section.entities", "Invalid memberships")
+                one_off.prepare(self.model, section, dt_util.utcnow(), ZoneInfo(self.hass.config.time_zone), self.solar, wall_instant)
                 if index is not None:
                     prior = {m["entity_key"]: m for m in model["schedules"][index]["entities"]}
                     for member in section["entities"]:
@@ -505,11 +554,16 @@ class Manager:
             resume_band = None
             if operation == "upsert" and index is not None:
                 old_bands = {b["id"]: b for sub in self.model["schedules"][index]["sub_schedules"] for b in sub["bands"]}
+                old_subs = {sub["id"]: sub for sub in self.model["schedules"][index]["sub_schedules"]}
                 saved_section = model["schedules"][index]
                 if saved_section.get("enabled", True) and not away_for(model, saved_section):
                     resume_band = next((band for sub in saved_section["sub_schedules"] for band in sub["bands"]
-                                        if band.get("enabled", True) and band["id"] in old_bands
-                                        and (band_disabled(old_bands[band["id"]], now) or (
+                                        if not band.get("one_off") and not band_disabled(band, now) and band["id"] in old_bands
+                                        and (band_disabled(old_subs.get(sub["id"], {}), now) or
+                                             (not old_subs.get(sub["id"], {}).get("enabled", True)
+                                              and old_subs[sub["id"]].get("disabled_until")
+                                              and previous_cursor < away_time(old_subs[sub["id"]]["disabled_until"]) <= now) or
+                                             band_disabled(old_bands[band["id"]], now) or (
                                             not old_bands[band["id"]].get("enabled", True)
                                             and old_bands[band["id"]].get("disabled_until")
                                             and previous_cursor < away_time(old_bands[band["id"]]["disabled_until"]) <= now))
@@ -519,6 +573,10 @@ class Manager:
                 old_section = self.model["schedules"][index]
                 new_section = model["schedules"][index]
                 execution_changed = execution_section(old_section) != execution_section(new_section) or any(self.model["entity_settings"].get(member["entity_key"]) != model["entity_settings"].get(member["entity_key"]) for member in new_section["entities"])
+            if not execution_changed:
+                # Metadata edits retain the cursor: the ordinary expiry event
+                # still owns any overdue resume and must not get a second one.
+                resume_band = None
             model["revision"] += 1
             at_cutover = execution_changed and previous_cursor < now and bool(compile_events(model, self.hass.config.time_zone, now - timedelta(microseconds=1), now, self.solar))
             candidate["runtime"]["cursor"] = ((now - timedelta(microseconds=1) if at_cutover else max(now, previous_cursor)) if execution_changed else previous_cursor).isoformat()
@@ -527,7 +585,8 @@ class Manager:
             for field in ("normal", "pre_away", "away_logical", "pending"):
                 candidate["runtime"][field] = {
                     k: v for k, v in candidate["runtime"][field].items()
-                    if k in valid_keys and (not execution_changed or v.get("source") != section_id)
+                    if k in valid_keys and v.get("one_off_id") not in cancelled_one_off
+                    and (not execution_changed or v.get("source") != section_id or v.get("one_off_id"))
                 }
             candidate["runtime"]["errors"] = {k: v for k, v in candidate["runtime"]["errors"].items() if k in candidate["runtime"]["pending"]}
             if execution_changed:
@@ -554,7 +613,7 @@ class Manager:
                 # Enabling through the draft commits the start with the new
                 # settings. An exact-boundary scheduled start handles itself.
                 scheduled_start = at_cutover and any(
-                    event.section["id"] == section_id and f":{resume_band['id']}:start:" in event.occurrence
+                    event.section["id"] == section_id and event.endpoint == "start"
                     for event in compile_events(model, self.hass.config.time_zone, now - timedelta(microseconds=1), now, self.solar)
                 )
                 if not scheduled_start:
@@ -565,6 +624,12 @@ class Manager:
                         self._normal(candidate, key, value, section_id, control="band_enable", band_id=resume_band["id"],
                                      **({"state_unit": unit} if unit is not None else {}))
                         self._desired(candidate, key, value, section_id, unit)
+            # A retimed Stop may now lie behind the already-advanced cursor.
+            # Journal it in this Save, without rewinding unrelated schedules.
+            if cancelled_one_off:
+                retimed_due = [event for event in compile_events(model, self.hass.config.time_zone, now, now, self.solar)
+                               if event.band_id in cancelled_one_off]
+                self._record_events(candidate, retimed_due)
             await self._persist(candidate)
             self.generation += 1
             self._arm()
@@ -589,12 +654,19 @@ class Manager:
         async with self.lock:
             require(not self.closed, "manager", "Integration unloaded")
             await self._expire_away(dt_util.utcnow())
-            target = next((state for state in self.control_states().values() if state["path"] == path), None)
+            target = next((state for state in self.control_states().values() if matches_path(state, path)), None)
             if target is None:
                 raise Invalid("path", "Unknown control path; discover current paths with get_disabled")
             revision = self.model["revision"]
         if target["kind"] == "schedule":
             await self.set_section_enabled(revision, target["schedule_id"], not disabled, defer_dispatch=True)
+        elif target["kind"] == "sub_schedule":
+            section = deepcopy(next(s for s in self.model["schedules"] if s["id"] == target["schedule_id"]))
+            sub = next(s for s in section["sub_schedules"] if s["id"] == target["sub_schedule_id"])
+            if sub.get("enabled", True) != (not disabled) or sub.get("disabled_until"):
+                sub["enabled"] = not disabled
+                sub.pop("disabled_until", None)
+                await self.save_section(revision, "upsert", section["id"], section)
         elif not disabled:
             await self.enable_band(revision, target["schedule_id"], target["band_id"], defer_dispatch=True)
         else:
@@ -619,6 +691,7 @@ class Manager:
             band = next((b for sub in section["sub_schedules"] for b in sub["bands"] if b["id"] == band_id), None)
             if band is None:
                 raise Invalid("band_id", "Unknown band")
+            require(not band.get("one_off"), "band_id", "One-off bands have no individual enable/disable control")
             if band.get("enabled", True):
                 return self.public()
             now = dt_util.utcnow()
@@ -675,7 +748,7 @@ class Manager:
             self._cancel_source_pending(candidate, section_id)
             for field in ("normal", "pre_away", "away_logical"):
                 runtime[field] = {k: v for k, v in runtime[field].items() if v.get("source") != section_id}
-            active = section_active(section, self.hass.config.time_zone, dt_util.utcnow(), self.solar)
+            active = section_active(section, self.hass.config.time_zone, dt_util.utcnow(), self.solar, recurring_only=True)
             for member in section["entities"]:
                 key = member["entity_key"]
                 if not climate(candidate["model"], key) and (not enabled or not active):
@@ -724,7 +797,7 @@ class Manager:
         if not enabled:
             resumed = {}
             for section in candidate["model"]["schedules"]:
-                if not section.get("away_enabled", True) or not section_active(section, self.hass.config.time_zone, at, self.solar):
+                if not section.get("away_enabled", True) or not section_active(section, self.hass.config.time_zone, at, self.solar, recurring_only=True):
                     continue
                 for member in section["entities"]:
                     key = member["entity_key"]

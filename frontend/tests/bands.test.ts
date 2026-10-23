@@ -1,9 +1,16 @@
 import {describe,expect,it} from 'vitest';
 import {bandDisabled} from '../src/bands';
-import type {Band} from '../src/types';
+import type {Band,Sub} from '../src/types';
 
 const band:Band={id:'band',start_minute:720,end_minute:960};
 describe('band suspension state',()=>{
+  it('evaluates sub-schedules without modifying independent band flags',()=>{
+    const sub:Sub={id:'sub',days:[0],bands:[{...band,enabled:false}],enabled:false,disabled_until:'2026-10-25T01:30:00Z'};
+    expect(bandDisabled(sub,Date.parse('2026-10-25T01:29:59Z'))).toBe(true);
+    expect(bandDisabled(sub,Date.parse('2026-10-25T01:30:00Z'))).toBe(false);
+    expect(bandDisabled(sub.bands[0])).toBe(true);
+    expect(sub.enabled).toBe(false);
+  });
   it('keeps legacy bands enabled and permanent suspensions disabled',()=>{
     expect(bandDisabled(band)).toBe(false);
     expect(bandDisabled({...band,enabled:true})).toBe(false);

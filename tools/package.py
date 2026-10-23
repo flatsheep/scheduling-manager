@@ -15,7 +15,8 @@ def main():
     # The card is inside custom_components, exactly as downloaded by HACS.
     files += [(ROOT / name, name) for name in ('README.md', 'API.md', 'TEST_RESULTS.md', 'HA_STANDARDS.md', 'HACS_PUBLISHING.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md')]
     # Local artifacts can contain private installation data; never package them.
-    files += [(p, str(p.relative_to(ROOT))) for p in (ROOT / 'docs/images').glob('*.png')]
+    files += [(p, str(p.relative_to(ROOT))) for p in (ROOT / 'docs').rglob('*')
+              if p.is_file() and p.suffix in ('.png', '.md')]
     with ZipFile(output, 'w', compression=ZIP_DEFLATED) as archive:
         for source, destination in sorted(files, key=lambda pair: pair[1]):
             info = ZipInfo(destination, date_time=(2026, 10, 6, 0, 0, 0))

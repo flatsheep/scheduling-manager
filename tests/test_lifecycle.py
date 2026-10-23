@@ -19,6 +19,29 @@ from custom_components.heating_schedule_manager.config_flow import HeatingSchedu
 
 
 class LifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_one_off_never_registers_native_disabled_switch(self):
+        from test_backend import NOW, fixture
+
+        self.assertTrue(await async_setup_component(self.hass, 'climate', {}))
+        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow', return_value=NOW):
+            entry = ConfigEntry(domain=DOMAIN, title='Scheduling Manager', data={}, options={}, source=SOURCE_USER,
+                                unique_id=DOMAIN, version=1, minor_version=1, discovery_keys={}, subentries_data=[])
+            await self.hass.config_entries.async_add(entry)
+            self.hass.states.async_set('climate.kitchen', 'heat', {
+                'supported_features': 1, 'min_temp': 7, 'max_temp': 35, 'target_temp_step': .5,
+            })
+            section, settings = fixture()
+            band = section['sub_schedules'][0]['bands'][0]
+            band['one_off'] = True
+            await entry.runtime_data.save_section(0, 'upsert', section['id'], section, settings)
+            await self.hass.async_block_till_done()
+            registry = er.async_get(self.hass)
+            self.assertIsNone(registry.async_get_entity_id('switch', DOMAIN, f'{DOMAIN}_disabled_{band["id"]}'))
+            self.assertIsNotNone(registry.async_get_entity_id('switch', DOMAIN, f'{DOMAIN}_disabled_{section["id"]}'))
+            await self.hass.config_entries.async_reload(entry.entry_id)
+            await self.hass.async_block_till_done()
+            self.assertIsNone(registry.async_get_entity_id('switch', DOMAIN, f'{DOMAIN}_disabled_{band["id"]}'))
+
     async def asyncSetUp(self):
         self.tmp=tempfile.TemporaryDirectory()
         self.hass=HomeAssistant(self.tmp.name)
@@ -126,7 +149,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             await entry.runtime_data.save_section(0, 'upsert', section['id'], section, settings)
             await self.hass.async_block_till_done()
             controls = [s for s in self.hass.states.async_all('switch') if s.attributes.get('path')]
-            self.assertEqual(len(controls), 2)
+            self.assertEqual(len(controls), 3)
             parent = next(s for s in controls if s.attributes['kind'] == 'schedule')
             child = next(s for s in controls if s.attributes['kind'] == 'band')
             self.assertEqual(parent.state, 'off')
@@ -150,6 +173,18 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             await self.hass.async_block_till_done()
             self.assertEqual(self.hass.states.get(child.entity_id).state, 'off')
             self.assertEqual(calls, [21])
+            sub_control = next(s for s in controls if s.attributes['kind'] == 'sub_schedule')
+            calls.clear()
+            await self.hass.services.async_call('switch', 'turn_on', {'entity_id': sub_control.entity_id}, blocking=True)
+            await self.hass.async_block_till_done()
+            self.assertEqual(calls, [])
+            self.assertEqual(self.hass.states.get(sub_control.entity_id).state, 'on')
+            self.assertEqual(self.hass.states.get(child.entity_id).state, 'on')
+            self.assertFalse(self.hass.states.get(child.entity_id).attributes['own_disabled'])
+            await self.hass.services.async_call('switch', 'turn_off', {'entity_id': sub_control.entity_id}, blocking=True)
+            await self.hass.async_block_till_done()
+            self.assertEqual(calls, [21])
+            self.assertEqual(self.hass.states.get(child.entity_id).state, 'off')
 
     async def test_control_paths_rename_without_entity_identity_changes_and_delete_cleanly(self):
         from copy import deepcopy
@@ -185,6 +220,112 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(self.hass.states.get(eid))
                 self.assertIsNone(registry.async_get(eid))
 
+    async def test_flat_device_upgrade_preserves_devices_and_entity_customisations(self):
+        from test_backend import NOW, fixture
+        from custom_components.heating_schedule_manager.switch import entry_devices
+
+        await async_setup_component(self.hass, 'climate', {})
+        entry = ConfigEntry(domain=DOMAIN, title='Scheduling Manager', data={}, options={}, source=SOURCE_USER,
+                            unique_id=DOMAIN, version=1, minor_version=1, discovery_keys={}, subentries_data=[])
+        await self.hass.config_entries.async_add(entry)
+        self.hass.states.async_set('climate.kitchen', 'heat', {'supported_features': 1, 'min_temp': 7, 'max_temp': 35, 'target_temp_step': .5})
+        section, settings = fixture()
+        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow', return_value=NOW):
+            # Model a previously supported flat-device installation using only
+            # registry APIs. Unload clears HA's per-setup main registrations.
+            with patch.object(dr.DeviceRegistry, 'async_get_or_create_child', None, create=True):
+                await entry.runtime_data.save_section(0, 'upsert', section['id'], section, settings)
+                await self.hass.async_block_till_done()
+            devices = dr.async_get(self.hass)
+            registry = er.async_get(self.hass)
+            before = {e.unique_id: (e.entity_id, e.device_id) for e in er.async_entries_for_config_entry(registry, entry.entry_id)}
+            device_ids = {d.id for d in entry_devices(devices, entry.entry_id)}
+            self.assertEqual(len(device_ids), 2)
+            sub_switch = next(s for s in self.hass.states.async_all('switch') if s.attributes.get('kind') == 'sub_schedule')
+            registry.async_update_entity(sub_switch.entity_id, name='Keep this name')
+            self.assertTrue(await self.hass.config_entries.async_reload(entry.entry_id))
+            await self.hass.async_block_till_done()
+            after = {e.unique_id: (e.entity_id, e.device_id) for e in er.async_entries_for_config_entry(registry, entry.entry_id)}
+            self.assertEqual(after, before)
+            self.assertEqual({d.id for d in entry_devices(devices, entry.entry_id)}, device_ids)
+            self.assertEqual(registry.async_get(sub_switch.entity_id).name, 'Keep this name')
+            sub_device = devices.async_get(registry.async_get(sub_switch.entity_id).device_id)
+            if hasattr(devices, 'async_get_or_create_child'):
+                self.assertIsNotNone(sub_device.parent_device_id)
+
+    async def test_existing_registry_migration_hierarchy_and_sub_deletion(self):
+        from copy import deepcopy
+        from test_backend import NOW, fixture, uid
+        from custom_components.heating_schedule_manager.switch import entry_devices
+
+        await async_setup_component(self.hass, 'climate', {})
+        entry = ConfigEntry(domain=DOMAIN, title='Scheduling Manager', data={}, options={}, source=SOURCE_USER,
+                            unique_id=DOMAIN, version=1, minor_version=1, discovery_keys={}, subentries_data=[])
+        await self.hass.config_entries.async_add(entry)
+        self.hass.states.async_set('climate.kitchen', 'heat', {'supported_features': 1, 'min_temp': 7, 'max_temp': 35, 'target_temp_step': .5})
+        section, settings = fixture()
+        sub = section['sub_schedules'][0]
+        band = sub['bands'][0]
+        other = deepcopy(sub)
+        other.update(id=uid(), days=[1], name='Tuesday')
+        other['bands'][0]['id'] = uid()
+        section['sub_schedules'].append(other)
+        registry = er.async_get(self.hass)
+        legacy = registry.async_get_or_create('switch', DOMAIN, f"{DOMAIN}_disabled_{band['id']}",
+            config_entry=entry, suggested_object_id='my_legacy_band_on_1200_off_1600', original_name='Old default')
+        registry.async_update_entity(legacy.entity_id, name='My custom name', icon='mdi:star')
+        orphan_id = uid()
+        orphan_device = dr.async_get(self.hass).async_get_or_create(config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, 'sub_schedule_' + orphan_id)}, name='Deleted while unloaded',
+            entry_type=dr.DeviceEntryType.SERVICE)
+        orphan = registry.async_get_or_create('switch', DOMAIN, f'{DOMAIN}_disabled_{orphan_id}',
+            config_entry=entry, suggested_object_id='orphan_disabled', device_id=orphan_device.id)
+        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow', return_value=NOW):
+            await entry.runtime_data.save_section(0, 'upsert', section['id'], section, settings)
+            await self.hass.async_block_till_done()
+            controls = {s.attributes['id']: s for s in self.hass.states.async_all('switch') if s.attributes.get('path')}
+            self.assertEqual(len(controls), 5)
+            self.assertIsNone(registry.async_get(orphan.entity_id))
+            self.assertIsNone(dr.async_get(self.hass).async_get(orphan_device.id))
+            migrated = registry.async_get(legacy.entity_id)
+            self.assertEqual(migrated.unique_id, legacy.unique_id)
+            self.assertEqual(migrated.name, 'My custom name')
+            self.assertEqual(migrated.icon, 'mdi:star')
+            self.assertEqual(controls[band['id']].entity_id, legacy.entity_id)
+            self.assertEqual(controls[band['id']].attributes['friendly_name'], 'My custom name')
+            devices = dr.async_get(self.hass)
+            parent_id = registry.async_get(controls[section['id']].entity_id).device_id
+            sub_id = registry.async_get(controls[sub['id']].entity_id).device_id
+            self.assertEqual(migrated.device_id, sub_id)
+            self.assertEqual(len(entry_devices(devices, entry.entry_id)), 3)
+            if hasattr(devices, 'async_get_or_create_child'):
+                self.assertEqual(devices.async_get(sub_id).parent_device_id, parent_id)
+            else:
+                self.assertIsNone(getattr(devices.async_get(sub_id), 'parent_device_id', None))
+            original_devices = {d.id for d in entry_devices(devices, entry.entry_id)}
+            await self.hass.config_entries.async_reload(entry.entry_id)
+            await self.hass.async_block_till_done()
+            self.assertEqual({d.id for d in entry_devices(devices, entry.entry_id)}, original_devices)
+            self.assertEqual(registry.async_get(legacy.entity_id).name, 'My custom name')
+            section['name'] = 'Renamed schedule'
+            sub['name'] = 'Renamed sub'
+            band['end_minute'] = 1020
+            await entry.runtime_data.save_section(1, 'upsert', section['id'], section, settings)
+            await self.hass.async_block_till_done()
+            self.assertEqual(devices.async_get(parent_id).name, 'Renamed schedule')
+            self.assertEqual(devices.async_get(sub_id).name,
+                'Renamed sub' if hasattr(devices, 'async_get_or_create_child') else 'Renamed schedule Renamed sub')
+            self.assertEqual(registry.async_get(legacy.entity_id).name, 'My custom name')
+            section['sub_schedules'].remove(sub)
+            await entry.runtime_data.save_section(2, 'upsert', section['id'], section, settings)
+            await self.hass.async_block_till_done()
+            self.assertIsNone(registry.async_get(legacy.entity_id))
+            self.assertIsNone(devices.async_get(sub_id))
+            self.assertIsNotNone(devices.async_get(parent_id))
+            await entry.runtime_data.save_section(3, 'delete', section['id'])
+            await self.hass.async_block_till_done()
+            self.assertEqual(entry_devices(devices, entry.entry_id), [])
+
     async def test_control_writes_require_admin_but_internal_automations_are_supported(self):
         from homeassistant.exceptions import Unauthorized
         from test_backend import NOW, fixture
@@ -203,10 +344,11 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             viewer = await self.hass.auth.async_create_user('Viewer', group_ids=['system-users'])
             self.assertFalse(viewer.is_admin)
             context = Context(user_id=viewer.id)
-            with self.assertRaises(Unauthorized):
-                await self.hass.services.async_call('switch', 'turn_on', {'entity_id': control.entity_id}, blocking=True, context=context)
-            with self.assertRaises(Unauthorized):
-                await self.hass.services.async_call(DOMAIN, 'set_disabled', {'path': control.attributes['path'], 'disabled': True}, blocking=True, context=context)
+            for native in [s for s in self.hass.states.async_all('switch') if s.attributes.get('path')]:
+                with self.assertRaises(Unauthorized):
+                    await self.hass.services.async_call('switch', 'turn_on', {'entity_id': native.entity_id}, blocking=True, context=context)
+                with self.assertRaises(Unauthorized):
+                    await self.hass.services.async_call(DOMAIN, 'set_disabled', {'path': native.attributes['immutable_path'], 'disabled': True}, blocking=True, context=context)
             result = await self.hass.services.async_call(DOMAIN, 'get_disabled', {'path': control.attributes['path']}, blocking=True, return_response=True, context=context)
             self.assertIs(result['disabled'], False)
             await self.hass.services.async_call(DOMAIN, 'set_disabled', {'path': control.attributes['path'], 'disabled': True}, blocking=True)
@@ -233,8 +375,10 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(self.hass.auth, 'async_get_user', AsyncMock(return_value=restricted)):
                 result = await self.hass.services.async_call(DOMAIN, 'get_disabled', {}, blocking=True, return_response=True, context=Context(user_id='restricted'))
                 self.assertEqual(result, {'controls': []})
-                with self.assertRaises(HomeAssistantError):
-                    await self.hass.services.async_call(DOMAIN, 'get_disabled', {'path': path}, blocking=True, return_response=True, context=Context(user_id='restricted'))
+                for state in entry.runtime_data.control_states().values():
+                    for inaccessible in [state['path'], state['immutable_path'], *state.get('legacy_paths', [])]:
+                        with self.assertRaises(HomeAssistantError):
+                            await self.hass.services.async_call(DOMAIN, 'get_disabled', {'path': inaccessible}, blocking=True, return_response=True, context=Context(user_id='restricted'))
             before = {s.entity_id for s in self.hass.states.async_all('switch') if s.attributes.get('path')}
             self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
             with self.assertRaises(HomeAssistantError):

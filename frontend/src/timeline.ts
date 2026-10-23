@@ -32,6 +32,7 @@ export class HeatingTimeline extends LitElement {
     .marker {cursor:pointer;touch-action:pan-x pan-y;outline:none}svg.editing .marker{touch-action:none}.marker:focus path,.marker.selected path {stroke:var(--primary-text-color,#222);stroke-width:3}
     .start {fill:var(--orange,#ff861f)} .end {fill:var(--blue,#009edc)}
     .marker.disabled path{fill:#555}.disabled-band{color:#555}.disabled-label{fill:#555;font-weight:700;paint-order:stroke;stroke:var(--card-background-color,#fff);stroke-width:3px}
+    .marker.one-off path,.marker.one-off:focus path,.marker.one-off.selected path{stroke:#e53935;stroke-width:2.5}.one-off-badge{pointer-events:none}.one-off-badge circle{fill:var(--ha-card-background,var(--card-background-color,#fff));stroke:#e53935;stroke-width:2}.one-off-badge ha-icon{display:block;width:24px;height:24px;line-height:0;--mdc-icon-size:24px;--ha-icon-size:24px;color:#e53935;transform:scale(.5833333333);transform-origin:top left}.ghost-preview .one-off-preview .ghost-marker{stroke:#e53935}
     .current-label rect{fill:var(--ha-card-background,var(--card-background-color,#fff));stroke:var(--orange,#ff861f);stroke-width:2}
     .current-label text{fill:var(--orange,#ff861f);font-weight:700;font-size:16px}
     .marker-tools{display:flex;gap:6px;margin:4px 0;min-height:44px;flex-wrap:wrap}button{font:inherit;min-height:44px;padding:6px 12px;border:1px solid var(--divider-color,#777);border-radius:7px;background:var(--secondary-background-color,#eee);color:var(--primary-text-color,#222);cursor:pointer}button:focus-visible{outline:3px solid var(--primary-color,#03a9f4)}
@@ -41,6 +42,7 @@ export class HeatingTimeline extends LitElement {
     .disabled-preview .ghost-marker,.disabled-preview .ghost-connector{stroke:#555}.disabled-preview .disabled-label{fill:#555}
   `;
   private emit(name: string, detail: unknown) { this.dispatchEvent(new CustomEvent(name, {detail, bubbles: true, composed: true})); }
+  private oneOffBadge(center:number) {return svg`<g class="one-off-badge" transform=${`translate(${center} 16) scale(1.3)`} role="img" aria-label="One-off time band"><circle r="10"/><foreignObject x="-7" y="-7" width="14" height="14">${html`<ha-icon icon="mdi:calendar-clock" aria-hidden="true"></ha-icon>`}</foreignObject></g>`;}
   private position(event: MouseEvent): number {
     const canvas = this.shadowRoot!.querySelector('svg')!;
     const matrix = canvas.getScreenCTM();
@@ -95,6 +97,7 @@ export class HeatingTimeline extends LitElement {
     if (this.edit && g.band && g.endpoint && !(g.endpoint==='start_minute'?g.band.start_dynamic:g.band.end_dynamic) && g.moved) {
       clearTimeout(this.tap); this.lastTap = undefined;
       g.band[g.endpoint] = clampEndpoint(this.sub, g.band, g.endpoint, this.position(event),this.solarMinutes);
+      if(g.band.one_off_run)delete g.band.one_off_run.minutes;
       this.requestUpdate(); this.emit('band-change', {});
     }
   }
@@ -158,18 +161,19 @@ export class HeatingTimeline extends LitElement {
           const compact=minutes[1]-minutes[0]<15;
           const top=!start&&compact?66:36;const bottom=!start&&compact?104:88;
           const center=x(minute)+offset;const labelY=(top+bottom)/2;
-          return svg`<g data-marker=${key} class="marker ${start?'start':'end'} ${bandDisabled(b)?'disabled':''} ${key===this.activeMarker?'selected':''}" role="button" tabindex="0" aria-pressed=${key===this.activeMarker} aria-label=${`${bandDisabled(b)?'Disabled. ':''}${start?'Target start':'Setback end'} ${time(minute)}${minute===1440?' End of day / midnight':''}. ${this.edit?'Enter edits, Delete removes band, arrows adjust five minutes.':'Select to bring forward. Tab selects overlapping markers.'}`}
+          return svg`<g data-marker=${key} class="marker ${start?'start':'end'} ${b.one_off?'one-off':''} ${bandDisabled(b)?'disabled':''} ${key===this.activeMarker?'selected':''}" role="button" tabindex="0" aria-pressed=${key===this.activeMarker} aria-label=${`${b.one_off?'One-off. ':''}${bandDisabled(b)?'Disabled. ':''}${start?'Target start':'Setback stop'} ${time(minute)}${minute===1440?' End of day / midnight':''}. ${this.edit?'Enter edits, Delete removes band, arrows adjust five minutes.':'Select to bring forward. Tab selects overlapping markers.'}`}
             @pointerdown=${(e:PointerEvent)=>this.down(e,b,endpoint)}
             @focus=${()=>{if(this.activeMarker!==key)this.promote(key,true);}}
-            @keydown=${(e:KeyboardEvent)=>{if(!this.edit){if(e.key==='Enter'||e.key===' '){this.promote(key);e.preventDefault();}return;}if(e.key==='Enter'){this.emit('band-edit',b);e.preventDefault();}if(e.key==='Delete'){this.emit('band-delete',b);e.preventDefault();}if(['ArrowLeft','ArrowRight'].includes(e.key)){if(!(endpoint==='start_minute'?b.start_dynamic:b.end_dynamic)){b[endpoint]=clampEndpoint(this.sub,b,endpoint,minute+(e.key==='ArrowLeft'?-5:5),this.solarMinutes);this.emit('band-change',{});this.requestUpdate();}e.preventDefault();}}}>
+            @keydown=${(e:KeyboardEvent)=>{if(!this.edit){if(e.key==='Enter'||e.key===' '){this.promote(key);e.preventDefault();}return;}if(e.key==='Enter'){this.emit('band-edit',b);e.preventDefault();}if(e.key==='Delete'){this.emit('band-delete',b);e.preventDefault();}if(['ArrowLeft','ArrowRight'].includes(e.key)){if(!(endpoint==='start_minute'?b.start_dynamic:b.end_dynamic)){b[endpoint]=clampEndpoint(this.sub,b,endpoint,minute+(e.key==='ArrowLeft'?-5:5),this.solarMinutes);if(b.one_off_run)delete b.one_off_run.minutes;this.emit('band-change',{});this.requestUpdate();}e.preventDefault();}}}>
             <rect class="hit-area" x=${center-14} y=${top} width="28" height=${108-top} fill="transparent"/>
             <path d=${`M ${x(minute)} 108 L ${center-9} ${bottom} L ${center-9} ${top} L ${center+9} ${top} L ${center+9} ${bottom} Z`}/>
             <text x=${center} y=${labelY} transform=${`rotate(-90 ${center} ${labelY})`} text-anchor="middle" dominant-baseline="central" style="fill:white;pointer-events:none">${label}</text>
           </g>`;
         })}
       </g>
+      ${this.sub.bands.filter(b=>b.one_off).map(b=>{const minutes=resolvedBand(b,this.solarMinutes);return minutes?this.oneOffBadge(x((minutes[0]+minutes[1])/2)):nothing;})}
       ${this.showCurrentTime?svg`<line class="current-line" x1=${x(this.minute)} y1="31" x2=${x(this.minute)} y2="149" stroke="var(--orange,#ff861f)" stroke-width="3.5" pointer-events="none"/>`:nothing}
-      ${this.previewSub?svg`<g class="ghost-preview" role="img" aria-label=${`Preview ${this.previewDay} sub-schedule`}>${this.previewSub.bands.map(band=>{const minutes=resolvedBand(band,this.previewSolarMinutes);return minutes?svg`<g class=${bandDisabled(band)?'disabled-preview':''}><line class="ghost-connector" x1=${x(minutes[0])} y1="68" x2=${x(minutes[1])} y2="68"/>${bandDisabled(band)?svg`<text class="disabled-label" x=${x((minutes[0]+minutes[1])/2)} y="24" text-anchor="middle">Disabled</text>`:nothing}${(['start_minute','end_minute'] as const).map(endpoint=>{const start=endpoint==='start_minute',minute=minutes[start?0:1],center=x(minute),dynamic=start?band.start_dynamic:band.end_dynamic;return svg`<g class="ghost-endpoint"><path class=${`ghost-marker ${start?'start':'end'}`} d=${`M ${center} 108 L ${center-9} 82 L ${center-9} 30 L ${center+9} 30 L ${center+9} 82 Z`}/><text x=${center} y="56" text-anchor="middle" dominant-baseline="central" transform=${`rotate(-90 ${center} 56)`}>${time(minute)}${dynamic?' *':''}</text></g>`;})}</g>`:nothing;})}</g>`:nothing}
+      ${this.previewSub?svg`<g class="ghost-preview" role="img" aria-label=${`Preview ${this.previewDay} sub-schedule`}>${this.previewSub.bands.map(band=>{const minutes=resolvedBand(band,this.previewSolarMinutes);return minutes?svg`<g class=${`${bandDisabled(band)?'disabled-preview':''} ${band.one_off?'one-off-preview':''}`}><line class="ghost-connector" x1=${x(minutes[0])} y1="68" x2=${x(minutes[1])} y2="68"/>${band.one_off?this.oneOffBadge(x((minutes[0]+minutes[1])/2)):nothing}${bandDisabled(band)?svg`<text class="disabled-label" x=${x((minutes[0]+minutes[1])/2)} y="24" text-anchor="middle">Disabled</text>`:nothing}${(['start_minute','end_minute'] as const).map(endpoint=>{const start=endpoint==='start_minute',minute=minutes[start?0:1],center=x(minute),dynamic=start?band.start_dynamic:band.end_dynamic;return svg`<g class="ghost-endpoint"><path class=${`ghost-marker ${start?'start':'end'}`} d=${`M ${center} 108 L ${center-9} 82 L ${center-9} 30 L ${center+9} 30 L ${center+9} 82 Z`}/><text x=${center} y="56" text-anchor="middle" dominant-baseline="central" transform=${`rotate(-90 ${center} 56)`}>${time(minute)}${dynamic?' *':''}</text></g>`;})}</g>`:nothing;})}</g>`:nothing}
       ${this.showCurrentTime?svg`<g class="current-label" role="img" aria-label=${`Current time ${time(this.minute)}`} pointer-events="none">
         <rect x=${x(this.minute)-32} y="1" width="64" height="30" rx="8"/>
         <text x=${x(this.minute)} y="22" text-anchor="middle">${time(this.minute)}</text>

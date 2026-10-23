@@ -20,12 +20,12 @@
   "services": {
     "get_disabled": {
       "name": "Get disabled state",
-      "description": "Read schedule or time-band disabled booleans. Leave path blank to discover current paths.",
+      "description": "Read schedule, sub-schedule or time-band disabled booleans. Leave path blank to discover descriptive and immutable UUID paths.",
       "fields": {"path": {"name": "Control path", "description": "The schedule_manager path to read."}}
     },
     "set_disabled": {
       "name": "Set disabled state",
-      "description": "Disable or enable a schedule or time band using its current path.",
+      "description": "Disable or enable a schedule, sub-schedule or time band using its descriptive or immutable UUID path.",
       "fields": {
         "path": {"name": "Control path", "description": "The schedule_manager path to update."},
         "disabled": {"name": "Disabled", "description": "True disables permanently. False cancels any timed disable and enables the control."}

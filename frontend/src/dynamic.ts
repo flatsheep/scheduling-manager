@@ -8,6 +8,7 @@ export function predictedMinute(dynamic:DynamicTime|undefined,solar:SolarMinutes
   const minute=solar[dynamic.event];return minute===undefined||minute===null?undefined:minute+dynamic.offset;
 }
 export function resolvedBand(band:Band,solar:SolarMinutes={}):[number,number]|undefined {
+  if(band.one_off_run?.minutes)return [...band.one_off_run.minutes];
   const values=(['start','end'] as const).map(endpoint=>{
     const dynamic=band[`${endpoint}_dynamic`];if(!dynamic)return band[`${endpoint}_minute`];
     const minute=predictedMinute(dynamic,solar);return minute===undefined?undefined:Math.max(0,Math.min(1440,minute));

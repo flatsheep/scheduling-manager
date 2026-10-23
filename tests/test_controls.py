@@ -29,13 +29,15 @@ class PathTests(unittest.TestCase):
         band.update(start_minute=420, end_minute=600)
         controls = control_states(model, NOW)
         self.assertEqual(controls[section['id']]['path'], 'schedule_manager.schedule1.disabled')
-        self.assertEqual(controls[band['id']]['path'], 'schedule_manager.schedule1.weekdays.band-on-0700-off-1000.disabled')
+        self.assertEqual(controls[band['id']]['path'], 'schedule_manager.schedule1.weekdays.band-start-0700-stop-1000.disabled')
+        self.assertEqual(controls[band['id']]['legacy_paths'], ['schedule_manager.schedule1.weekdays.band-on-0700-off-1000.disabled'])
         section['name'] = 'Kitchen Heating'
         band['end_minute'] = 1440
         renamed = control_states(model, NOW)
         self.assertEqual(set(renamed), set(controls))
-        self.assertEqual(renamed[band['id']]['path'], 'schedule_manager.kitchen_heating.weekdays.band-on-0700-off-2359.disabled')
-        self.assertEqual(len(renamed), 2)  # No sub-schedule Disabled control.
+        self.assertEqual(renamed[band['id']]['path'], 'schedule_manager.kitchen_heating.weekdays.band-start-0700-stop-2359.disabled')
+        self.assertEqual(renamed[band['id']]['immutable_path'], controls[band['id']]['immutable_path'])
+        self.assertEqual(len(renamed), 3)
 
     def test_names_collide_without_target_ambiguity(self):
         model = self.model()
@@ -68,7 +70,7 @@ class PathTests(unittest.TestCase):
         controls = control_states(model, NOW)
         self.assertEqual(len({c['path'] for c in controls.values()}), len(controls))
         self.assertIn('sub_schedule_1__id_', controls[band['id']]['path'])
-        self.assertIn('band-on-sunrise-plus-30-off-1000__id_', controls[band['id']]['path'])
+        self.assertIn('band-start-sunrise-plus-30-stop-1000__id_', controls[band['id']]['path'])
         self.assertIn('sunset-minus-15', controls[other['bands'][0]['id']]['path'])
 
     def test_effective_parent_flags_do_not_change_band_preferences(self):
@@ -177,11 +179,11 @@ class ControlTests(unittest.IsolatedAsyncioTestCase):
         await self.manager.set_disabled(self.path(band['id']), False)
         self.assertEqual(self.calls, [])  # Outside the band's hours.
 
-    async def test_invalid_paths_subschedule_controls_and_values_are_rejected(self):
+    async def test_invalid_paths_and_values_are_rejected(self):
         section, settings = named_fixture()
         await self.save(section, settings)
         before = deepcopy(self.manager.snapshot)
-        for path, value in (('schedule_manager.schedule1.weekdays.disabled', True),
+        for path, value in (('schedule_manager.schedule1.missing.disabled', True),
                             ('schedule_manager.missing.disabled', False), (None, True),
                             (self.path(section['id']), 'true'), (self.path(section['id']), 1)):
             with self.assertRaises(Invalid):
@@ -217,11 +219,18 @@ class ControlTests(unittest.IsolatedAsyncioTestCase):
         with patch('custom_components.heating_schedule_manager.services.get_manager', return_value=self.manager):
             result = await self.hass.services.async_call('heating_schedule_manager', 'get_disabled', {},
                                                          blocking=True, return_response=True)
-            self.assertEqual(len(result['controls']), 2)
+            self.assertEqual(len(result['controls']), 3)
             path = self.path(section['id'])
             result = await self.hass.services.async_call('heating_schedule_manager', 'set_disabled',
                                                          {'path': path, 'disabled': True}, blocking=True, return_response=True)
             self.assertIs(result['disabled'], True)
+            band = section['sub_schedules'][0]['bands'][0]
+            state = self.manager.control_states()[band['id']]
+            for alias in (state['path'], state['immutable_path'], state['legacy_paths'][0]):
+                result = await self.hass.services.async_call('heating_schedule_manager', 'get_disabled',
+                    {'path': alias}, blocking=True, return_response=True)
+                self.assertEqual(result['id'], band['id'])
+                self.assertTrue(result['parent_disabled'])
             result = await self.hass.services.async_call('heating_schedule_manager', 'get_disabled',
                                                          {'path': path}, blocking=True, return_response=True)
             self.assertIs(result['disabled'], True)

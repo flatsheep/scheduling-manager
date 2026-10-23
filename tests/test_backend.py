@@ -57,7 +57,6 @@ class ValidationTests(unittest.TestCase):
         for change in (
             lambda s: s.update(name='  '), lambda s: s.update(entities=[]),
             lambda s: s['sub_schedules'][0].update(days=[]),
-            lambda s: s['sub_schedules'][0].update(bands=[]),
             lambda s: s['sub_schedules'][0]['bands'][0].update(end_minute=720),
             lambda s: s['sub_schedules'][0]['bands'][0].update(start_minute=721),
         ):

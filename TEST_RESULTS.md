@@ -1,5 +1,151 @@
 # Verification results
 
+## Release 1.12.0: one-offs, sub-schedule controls and documentation
+
+- Release-candidate backend validation on isolated HA **2026.8.1** passed all
+  **214 tests across 11 suites**, including 32 one-off cases. Combined
+  line/branch coverage is **96.47%**, above the unchanged 95.1% gate.
+- Production frontend build, **26 unit tests** and all **82 Chromium tests**
+  passed with matching integration/card version **1.12.0**.
+- Ruff lint, all ten repository-selected formatting checks, gradual mypy and
+  official hassfest passed (one valid integration, zero invalid).
+- Documentation link checks passed. The manual-install ZIP contains 65 files,
+  including all public guides and seven supplied screenshots, with safe paths,
+  valid CRCs and byte-identical payloads. Repeated packaging produced identical
+  ZIP bytes; no local HA configuration, caches or installation records are included.
+- The README is condensed into installation, quick-start and feature essentials.
+  Detailed guidance is in `docs/USER_GUIDE.md`, `docs/ONE_OFF_BANDS.md` and
+  `docs/DEVELOPMENT.md`. All seven updated documentation images are the
+  maintainer-supplied originals, including native parent/child device grouping.
+- Existing local deployment checks are recorded below. Publication changes do
+  not restart or alter the running production installation.
+
+## One-off manual deletion and time editing (2026-10-23)
+
+- Removed the selected-occurrence deletion and time-edit restrictions. Manual
+  deletion cancels remaining work without device commands, including a failed
+  Stop. Time edits keep the same cycle, preserve Start history and captured
+  actions, and move Stop on the selected date. Overdue edited Stops execute on
+  Save. The popup, keyboard and pointer timeline editors support time changes.
+- **32 one-off backend tests**, **52 backend regressions**, **33 band tests**
+  and **16 sub-schedule tests** passed on isolated HA 2026.10.1. New cases cover
+  deleting running/failed bands, containing schedule/sub-schedule deletion,
+  extended/overdue Stop edits, stale retry cancellation, failed persistence,
+  restart recovery and unrelated same-boundary commands.
+- Production frontend build, **26 unit tests**, **5 focused Chromium tests**,
+  Ruff and mypy passed. No broad compatibility matrix was repeated for this fix.
+- Installed three targeted integration files and performed one explicitly
+  authorised restart. HA 2026.10.1 loaded cleanly; revision **125**, the complete
+  saved model (including the running one-off), all **43 entities**, **34 controls**,
+  user customisations and dashboard resources were preserved. All **50 alias
+  reads** passed, served frontend matched the build, and scheduler errors were
+  zero. No physical-device test or direct storage edit was performed.
+
+## One-off partial-interval and timeline follow-up (2026-10-23)
+
+- Read-only inspection explained the reported retained band: 21:05–21:15 was
+  saved at 21:11:29 and the initial full-interval rule selected the following day.
+  The user approved immediate Start when saving inside an eligible interval.
+- Implemented immediate partial execution and durable recovery of previously
+  waiting partial intervals. Elapsed recovery sends final Stop only, without
+  replaying Start. Saving after Stop still waits for the next selected day;
+  creation under a disabled/Away gate does not invent a partial resume.
+- Replaced visible timeline One-off labels/details with red band and marker
+  outlines, including read-only previews. Popup status/details remain available.
+- **24 focused backend tests** passed; five focused Chromium cases passed
+  (four on the first pass, the preview case after fixing CSS specificity).
+  Production build and Ruff lint passed. Broad suites were not repeated.
+- Deployed the two changed integration files after explicit permission and one
+  restart. HA 2026.10.1 loaded cleanly at revision **120**, with all **43 entities**
+  and **34 controls** preserved and no scheduler errors. Served bundle matched.
+  The reported waiting band was already absent at deployment preflight; no
+  production one-off or physical-device test was created to replace it.
+
+## Local one-off time-band development (2026-10-23)
+
+- All **203 backend tests across 11 suites** passed on HA **2026.7.0**,
+  **2026.8.1**, **2026.9.4** and **2026.10.1**, using isolated network-disabled
+  containers and mocked devices. This includes 21 dedicated one-off cases and
+  native-switch exclusion/reload coverage.
+- Covered shared weekdays, after-Start creation, exact boundaries, partial and
+  long downtime, failed Start/Stop, multi-entity acknowledgement, stale drafts,
+  immutable type, parent/sub-schedule/Away interruption, frozen actions,
+  persistence/deletion failures, supersession, solar changes, DST and midnight.
+  True overnight definitions remain rejected.
+- Combined line/branch coverage on HA 2026.8.1: **96.53%**, retaining the existing
+  95.1% gate. Frontend production build and **26 unit tests** passed.
+- **81 Chromium tests passed**, including four new one-off popup, frozen editor,
+  deletion/conflict and failed-save cases; the four focused cases passed again
+  after final frontend adjustments.
+- Ruff lint, gradual mypy and official hassfest passed (one valid integration,
+  zero invalid).
+- Deployed seven targeted integration files locally after explicit restart
+  authorisation, with exactly one production restart. HA **2026.10.1** loaded
+  successfully. Saved model/revision **117**, all **43 native entities**, their
+  identities/customisations, **34 existing controls**, and Lovelace resources
+  were preserved. All **50 alias reads** passed; served assets matched the
+  installed build. No scheduler storage/device/log errors were reported.
+  Verification used read-only production checks; no physical-device tests,
+  deployment backups, direct storage edits, commits or publication occurred.
+- Functional behaviour and delivery limitations are documented in
+  `docs/ONE_OFF_BANDS.md`.
+
+## Local development phase after 1.11.0: sub-schedule controls (2026-10-23)
+
+- **181 backend tests across 10 suites passed** in isolated, network-disabled
+  containers on HA **2026.7.0**, **2026.8.1** and **2026.10.1**. Combined
+  line/branch coverage on 2026.8.1: **96.23%** (existing 95.1% gate retained).
+- **16 focused sub-schedule cases** cover permanent/timed gates, active/inactive
+  re-enable, parent/band independence, Away inclusion/exclusion, offline expiry,
+  restart idempotence, stale callbacks/revision conflicts, failed persistence,
+  metadata-only edits, overlapping schedules/solar bands, midnight and both UK
+  DST boundaries. Equivalent ISO timestamps retain an unchanged expired deadline.
+- Real HA lifecycle checks verify legacy UUID entity-registry migration with
+  unchanged entity IDs and user names/icons, native sub-schedule switch semantics,
+  rename/time-edit identity, reload, orphan cleanup and sub-schedule deletion.
+  Native child registration also passed on **2026.9.4**; 2026.7/2026.8 flat-device
+  fallback and 2026.10 native-child behaviour passed the full lifecycle suites.
+- Old On/Off, new Start/Stop and immutable UUID paths are covered for reads and
+  writes; administrator restrictions and entity-read filtering cover all levels.
+- Frontend production build and **24 unit tests passed**. **75 Chromium browser
+  tests passed**, including modal operation, draft isolation, Apply/Save/Cancel,
+  disabled-day black/white/red styling in edit/view mode, refresh and timed expiry.
+  An initial browser failure exposed a view-mode CSS cascade issue, now fixed.
+- Ruff lint, repository-selected formatting, gradual mypy and official hassfest
+  passed (one valid integration, zero invalid). Device-free HA configuration
+  validation passed on **2026.7.0** and **2026.10.1**. The existing production
+  configuration also returned `valid` through HA's supported check-config API.
+- Packaging passed: deterministic ZIP bytes on repeated builds, CRC checks,
+  safe relative paths, byte-identical bundled card and exclusion of HA storage
+  and Python caches. ZIPs were built in disposable container tmpfs; published
+  artifacts were not overwritten. `git diff --check` passed.
+- Read-only production preflight found **8 schedules, 10 sub-schedules, 16 bands,
+  24 existing Disabled controls and 33 native integration entities**, loaded without
+  scheduler storage/device errors. In-memory validation with the candidate code
+  preserved the production model exactly. The candidate adds exactly 10 switches
+  (one per sub-schedule), for 34 Disabled controls, grouped into 18 devices.
+- Installed source matched the repository baseline except three version-label
+  files still declaring 1.10.0. The running frontend resource matched the installed
+  bundle. This agrees with the earlier pre-release-label deployment noted below.
+- **Deployed locally following explicit restart authorisation:** installed 13
+  changed integration files and performed one restart of `homeassistant`.
+  HA **2026.10.1** returned to `RUNNING`, with the integration `loaded`.
+  All **8 schedules, 10 sub-schedules and 16 bands** remained identical at revision
+  **111**. All **33 existing entity identities and user customisations** were
+  preserved; there are now **43 native entities**, including **34 Disabled
+  controls**, grouped into **8 schedule devices and 10 native child devices**.
+  Every band switch belongs to its corresponding sub-schedule child device.
+  All **50 read-only immutable/legacy-path checks** passed, native switch states
+  and attributes matched the API, and served card/loader bytes matched the build.
+  The frontend module was registered, user Lovelace resources were unchanged,
+  pending application was false, and no scheduler storage/device or log errors
+  were reported on initial and follow-up checks. Verification did not toggle
+  physical devices. No backups, direct HA storage edits, GitHub publication or
+  commits were made.
+- Existing daily-band semantics are preserved: a fixed band cannot wrap midnight;
+  overnight schedules use adjacent daily bands. Persisted `end_*` and WebSocket
+  `end` values remain compatible while display labels use Start/Stop.
+
 ## Integration/card 1.11.0: programmatic schedule and band controls
 
 - All **nine backend suites** passed on isolated HA **2026.8.1** and **2026.10.1**.

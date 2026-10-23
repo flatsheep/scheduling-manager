@@ -8,6 +8,7 @@ from homeassistant.exceptions import HomeAssistantError, Unauthorized
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr
 from homeassistant.util import slugify
 
 from .const import DOMAIN, SIGNAL
@@ -16,6 +17,13 @@ from .scheduler import Manager
 from .validation import Invalid
 
 PARALLEL_UPDATES = 1
+
+
+def entry_devices(registry, entry_id):
+    """HA's config-entry lookup returns main devices only, even on child-aware Core."""
+    parents = dr.async_entries_for_config_entry(registry, entry_id)
+    children = getattr(dr, "async_entries_for_parent_device", None)
+    return parents + ([child for parent in parents for child in children(registry, parent.id)] if children else [])
 
 
 async def async_setup_entry(
@@ -31,6 +39,43 @@ async def async_setup_entry(
     def sync() -> None:
         targets = entry.runtime_data.control_states()
         registry = er.async_get(hass)
+        devices = dr.async_get(hass)
+        device_ids: dict[str, str] = {}
+        # Register parents first. Services are valid registry devices; no false
+        # gateway/via_device relationship is used for these logical controls.
+        for target in targets.values():
+            if target["kind"] == "schedule":
+                parent = devices.async_get_or_create(
+                    config_entry_id=entry.entry_id,
+                    identifiers={(DOMAIN, "schedule_" + target["schedule_id"])},
+                    name=target["schedule_name"],
+                    entry_type=dr.DeviceEntryType.SERVICE,
+                )
+                device_ids[target["id"]] = parent.id
+        for target in targets.values():
+            if target["kind"] == "sub_schedule":
+                info = {
+                    "config_entry_id": entry.entry_id,
+                    "identifiers": {(DOMAIN, "sub_schedule_" + target["sub_schedule_id"])},
+                    "name": target["sub_schedule_name"],
+                }
+                create_child = getattr(devices, "async_get_or_create_child", None)
+                if create_child is not None:
+                    device = create_child(**info, parent_device_id=device_ids[target["schedule_id"]])
+                else:
+                    info["name"] = f"{target['schedule_name']} {target['sub_schedule_name']}"
+                    device = devices.async_get_or_create(**info, entry_type=dr.DeviceEntryType.SERVICE)
+                device_ids[target["id"]] = device.id
+        for key, target in targets.items():
+            target["device_id"] = device_ids[target.get("sub_schedule_id", target["schedule_id"])]
+        # Reconcile persisted entries too, including deletions while unloaded.
+        for registered in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if registered.unique_id.startswith(f"{DOMAIN}_disabled_"):
+                key = registered.unique_id.removeprefix(f"{DOMAIN}_disabled_")
+                if key not in targets:
+                    registry.async_remove(registered.entity_id)
+                elif registered.device_id != targets[key]["device_id"]:
+                    registry.async_update_entity(registered.entity_id, device_id=targets[key]["device_id"])
         for key in entities.keys() - targets.keys():
             entity = entities.pop(key)
             if registry.async_get(entity.entity_id):
@@ -46,6 +91,13 @@ async def async_setup_entry(
                 new.append(entities[key])
         if new:
             async_add_entities(new)
+        live_devices = set(device_ids.values())
+        for device in reversed(entry_devices(devices, entry.entry_id)):
+            if device.id not in live_devices and any(
+                domain == DOMAIN and identifier.startswith(("schedule_", "sub_schedule_"))
+                for domain, identifier in device.identifiers
+            ):
+                devices.async_remove_device(device.id)
 
     entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL, sync))
     sync()
@@ -56,6 +108,7 @@ class DisabledSwitch(SwitchEntity):
 
     _attr_should_poll = False
     _attr_icon = "mdi:calendar-remove"
+    _attr_has_entity_name = True
 
     def __init__(self, manager: Manager, key: str, target: dict[str, Any]) -> None:
         self.manager = manager
@@ -66,10 +119,18 @@ class DisabledSwitch(SwitchEntity):
 
     @property
     def name(self) -> str:
-        label = self.target["schedule_name"]
-        if self.target["kind"] == "band":
-            label += f" {self.target['sub_schedule_name']} {self.target['path'].split('.')[-2]}"
-        return label + " disabled"
+        if self.target["kind"] != "band":
+            return "Disabled"
+
+        def display(value: str) -> str:
+            return value[:2] + ":" + value[2:] if value.isdecimal() else value.replace("-", " ")
+
+        return f"Start {display(self.target['start'])} Stop {display(self.target['stop'])} disabled"
+
+    async def async_added_to_hass(self) -> None:
+        """Attach without replacing the registry identity or user customisations."""
+        if device_id := self.target.get("device_id"):
+            er.async_get(self.hass).async_update_entity(self.entity_id, device_id=device_id)
 
     @property
     def is_on(self) -> bool:

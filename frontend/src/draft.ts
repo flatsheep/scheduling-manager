@@ -66,7 +66,6 @@ export function draftError(draft: Draft, caps: Capability[]): string {
     if (!sub.days.length) return 'Select at least one day in every sub-schedule.';
     if (sub.days.some(d => seen.has(d))) return 'A weekday can belong to only one sub-schedule.';
     sub.days.forEach(d => seen.add(d));
-    if (!sub.bands.length) return 'Add at least one time band in every sub-schedule.';
     for (const b of sub.bands) { const error = bandError(sub, b.start_minute, b.end_minute, b.id,b); if (error) return error; }
   }
   for (const member of section.entities) {
@@ -74,7 +73,7 @@ export function draftError(draft: Draft, caps: Capability[]): string {
     const cap = caps.find(c => c.entity_id === setting.entity_id);
     if (!cap?.supported) return `Unsupported device: ${setting.entity_id}`;
     if(!setting.entity_id.startsWith('climate.')){
-      if(!validState(member.start_state,cap)||!validState(member.end_state,cap))return `Choose valid start and end states for ${cap.name}.`;
+      if(!validState(member.start_state,cap)||!validState(member.end_state,cap))return `Choose valid Start and Stop states for ${cap.name}.`;
       if(cap.kind==='number'&&[member.start_unit,member.end_unit].some(unit=>unit!==undefined&&unit!==(cap.unit??'')))return `Unit changed; choose both values again for ${cap.name}.`;
       continue;
     }

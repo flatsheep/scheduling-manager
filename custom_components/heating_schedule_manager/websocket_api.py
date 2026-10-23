@@ -32,8 +32,17 @@ def visible(manager: Manager, user: User) -> dict[str, Any]:
     model["entity_settings"] = {key: value for key, value in model["entity_settings"].items() if key in allowed}
     for section in model["schedules"]:
         section["entities"] = [member for member in section["entities"] if member["entity_key"] in allowed]
+        for sub in section["sub_schedules"]:
+            for band in sub["bands"]:
+                if run := band.get("one_off_run"):
+                    run["entities"] = [member for member in run["entities"] if member["entity_key"] in allowed]
+                    run["settings"] = {key: value for key, value in run["settings"].items() if key in allowed}
     model["schedules"] = [section for section in model["schedules"] if section["entities"]]
     visible_ids = {section["id"] for section in model["schedules"]}
+    visible_bands = {
+        band["id"] for section in model["schedules"] for sub in section["sub_schedules"] for band in sub["bands"]
+    }
+    result["one_off_status"] = {key: value for key, value in result["one_off_status"].items() if key in visible_bands}
     result["active_schedules"] = {key: value for key, value in result["active_schedules"].items() if key in visible_ids}
     result["locations"] = entity_locations(manager.hass, model["entity_settings"])
     result["status"] = {key: value for key, value in result["status"].items() if key in allowed}

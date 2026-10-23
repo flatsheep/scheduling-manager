@@ -70,11 +70,13 @@ An upsert section has:
     {entity_key: UUID, start_state: string | finite number, end_state: string | finite number}
   ],
   sub_schedules: [{
-    id: UUID, name?: trimmed string, days: [0..6],
+    id: UUID, name?: trimmed string, days: [0..6], enabled?: boolean,
+    disabled_until?: ISO_date_time_string,
     bands: [{id: UUID, start_minute: integer, end_minute: integer,
              start_dynamic?: {event: solar_event, offset: integer},
               end_dynamic?: {event: solar_event, offset: integer},
-              enabled?: boolean, disabled_until?: ISO_date_time_string}]
+               enabled?: boolean, disabled_until?: ISO_date_time_string,
+               one_off?: boolean}]
   }]
 }
 ```
@@ -84,7 +86,7 @@ UUID: {entity_id: "climate.…", registry_id: optional registry UUID/null,
        setback: {value: finite number, unit: "°C" | "°F"}}
 UUID: {entity_id: "light.…" | other supported entity ID, registry_id: optional registry UUID/null}
 ```
-Days are Monday=0. Enforce 1–7 disjoint nonempty sub-schedules, 1–10 bands each, five-minute fixed endpoints, `0 <= start < end <= 1440` for fixed-only bands, and at least one unique writable membership. Fixed-only bands cannot overlap each other. `1440` displays as 23:59. All UUIDs within each relevant identity collection must be unique. Sections may share entities and overlapping times. Unused shared settings are cleaned only on successful commit.
+Days are Monday=0. Enforce 1–7 disjoint nonempty weekday sets, 0–10 bands per sub-schedule, five-minute fixed endpoints, `0 <= start < end <= 1440` for fixed-only bands, and at least one unique writable membership. Empty sub-schedules are valid and inactive. Fixed-only bands cannot overlap each other. `1440` displays as 23:59. All UUIDs within each relevant identity collection must be unique. Sections may share entities and overlapping times. Unused shared settings are cleaned only on successful commit.
 
 Dynamic endpoints (1.6.0): each optional definition contains exactly `event` and `offset`. Events are `sunrise | sunset | dawn | dusk | noon | midnight`; offsets are integer minutes from −300 through +300. Absent/null definitions canonicalize to fixed time. The required minute fields remain five-minute fixed anchors for switching back to fixed mode, not cached solar results, and may match/cross when a dynamic definition is present. Runtime resolution uses HA's local date/location and whole-minute solar events, adds offsets, then clamps to 0–1440. **Since 1.6.3, Start always anchors crossing: if Start exceeds End, End becomes Start**, irrespective of which endpoint is dynamic; endpoints never swap. A collapsed band produces only an end occurrence at the common Start instant and is never active. Missing solar events skip the whole band for that date. Solar-driven overlaps follow normal endpoint order/last-command semantics; dynamic configuration is not silently reordered. Save, startup recovery, Enable and Away exit use the same resolver. Schema/storage version 1 is retained as an optional-field extension.
 
@@ -94,10 +96,10 @@ Only this explicit section operation applies. Omitted unrelated sections are nev
 
 New sections are enabled by default. Existing sections missing `enabled` are interpreted as enabled. Section Save preserves the saved enable state; attempts to change it through Save are rejected. Use the explicit immediate action below.
 
-Bands additionally accept optional `enabled` (boolean, default `true`) and
+Sub-schedules and bands accept optional `enabled` (boolean, default `true`) and
 `disabled_until` (ISO date/time string, only valid with `enabled: false`). These
 are ordinary draft edits committed through section Save. Omitting the deadline
-disables the band permanently. New or changed deadlines must be in the future;
+disables that object permanently. New or changed deadlines must be in the future;
 local inputs use HA's timezone and the same DST-gap/fold rules as timed Away.
 Saved deadlines are canonical UTC timestamps. Unchanged expired deadlines remain
 valid when saving unrelated edits. Storage/schema version 1 is retained.
@@ -105,10 +107,48 @@ valid when saving unrelated edits. Storage/schema version 1 is retained.
 The card changes band status through section Save. Re-enabling an existing
 disabled band applies the newly saved start settings if that particular band is
 active at commit time, unless schedule disable or applicable Away suspends it.
-New bands, ordinary edits to enabled bands and inactive-band enables do not
+New recurring bands, ordinary edits to enabled recurring bands and inactive-band enables do not
 synthesize starts. A scheduled boundary start or an already processed timed
 expiry is not duplicated. Apply and Cancel perform no configuration mutation;
 only Save commits the band-status change and journals any required start.
+
+### One-off bands (1.12.0)
+
+`one_off` is an optional boolean, default false, chosen only when creating a new
+band ID. Existing bands cannot change type. One-offs reject individual disabling
+and are excluded from native Disabled switches, control discovery and
+`enable_band`. Parent controls and Away still apply.
+
+Server-owned `one_off_after`, `one_off_partial` and `one_off_run` fields retain
+activation/occurrence state. Client attempts to supply or rewrite that state are
+ignored; existing values are preserved from the canonical model. A selected run
+captures its originating date, resolved UTC endpoints, display minutes, entity
+memberships and action settings, plus endpoint progress. Captured memberships
+and settings in public replies are filtered by entity read permissions.
+
+The next eligible weekday supplies one cycle, not one cycle per selected day.
+Saving inside an enabled selected interval starts immediately; saving after Stop
+waits for the next selected day. Creation under a disabled/Away gate does not
+invent a partial resume when enabled later. During downtime, a partially missed
+interval recovers Start; an entirely missed interval recovers final Stop only.
+
+Time edits remain allowed after selection. Start is not replayed; Stop moves on
+the selected occurrence's date and is journalled immediately if overdue. Obsolete
+pending commands are cancelled atomically. Captured actions and selected weekdays
+remain fixed. Manual deletion of the band, containing sub-schedule or schedule
+cancels pending work without device commands. Failed persistence preserves the
+previous durable obligation.
+
+Selected cycles retain Stop cleanup through parent disabling/Away. Stop failures
+keep pending work without another Start. Successful or superseded Stop intent
+retires the band from every shared weekday, increments revision and notifies
+subscribers. Empty containers remain; stale drafts cannot resurrect completed IDs.
+
+Get/subscribe replies include `one_off_status`, keyed by visible band UUID, with
+`status` (`Waiting`, `Running`, `Stop pending`) and nullable UTC `start`/`end`.
+These are read-only derived status, not automation control paths. Runtime failures
+continue to use the existing per-entity `status` map. See
+[one-off behaviour](docs/ONE_OFF_BANDS.md) for delivery and crash-window limitations.
 
 A band is suspended when `enabled` is false and its deadline is absent or still
 in the future. Each endpoint is checked at its actual UTC occurrence, including
@@ -167,7 +207,7 @@ Global Away affects only sections with `away_enabled: true`. Entry queues only n
 
 ## Programmatic Disabled controls (added in 1.11.0)
 
-The integration exposes native Disabled switches for schedules and bands, and
+The integration exposes native Disabled switches for schedules, sub-schedules and bands, and
 two HA actions through the standard action/REST/WebSocket service APIs:
 
 - `heating_schedule_manager.get_disabled`: optional `path`; response required.
@@ -177,25 +217,54 @@ two HA actions through the standard action/REST/WebSocket service APIs:
 
 Records include `path`, `kind`, `schedule_id`, schedule name, `disabled`,
 `own_disabled`, `parent_disabled`, `disabled_until` and `suspended_by_away`.
+`kind` is `schedule`, `sub_schedule` or `band`; `id` and `immutable_path` are stable.
 Band records additionally include stable `sub_schedule_id`, `band_id` and the
 sub-schedule's display name. Native switches publish the same record as state
 attributes, and map their `on` state to effective `disabled: true`.
 
-Paths have the form `schedule_manager.<schedule>.disabled` or
-`schedule_manager.<schedule>.<sub>.band-on-<start>-off-<end>.disabled`.
+Paths have the form `schedule_manager.<schedule>.disabled`,
+`schedule_manager.<schedule>.<sub>.disabled`, or
+`schedule_manager.<schedule>.<sub>.band-start-<start>-stop-<stop>.disabled`.
 Schedule/sub-schedule names are slugged to lowercase underscore-separated names.
 Collisions within a scope append `__id_<full UUID without hyphens>` to each
 colliding component, independently of ordering. Sub-schedule fallbacks use
 `sub_schedule_N`; solar endpoints use `event-plus-N` / `event-minus-N`, omitting
 the suffix for zero offset. End-of-day 1440 uses `2359`, matching the card.
-Paths change on rename/time edits, while native entity unique IDs remain stable.
-No sub-schedule-level control exists.
+Descriptive paths change on rename/time edits. Every record also exposes its
+immutable UUID as `id` and an `immutable_path` of
+`schedule_manager.id.<UUID>.disabled`. Pass this immutable path in the existing
+`path` parameter for rename/time-edit-safe reads and writes. Native entity unique
+IDs remain unchanged. Band records expose their old `band-on-…-off-…` path in
+`legacy_paths`; both old and new endpoint formats are accepted by both actions.
+Historical descriptive names are not retained after a rename; use UUID paths
+when references must survive edits.
+
+The UI calls time-band endpoints **Start/Stop**. Persisted fields and existing
+WebSocket endpoint values retain `end_minute`, `end_dynamic`, `end_state`,
+`end_unit` and `end` for backwards compatibility; they mean Stop. No data-field
+rename or destructive storage migration is needed.
 
 Setting true makes an object's own disable permanent. Setting false cancels a
-band's deadline and enables it. Active bands resume start settings, respecting
-the parent's enabled flag and applicable Away. A band's effective disabled read
-is `parent_disabled OR own_disabled`; parent writes never rewrite band flags.
+child's deadline and enables it. Active bands resume Start settings, respecting
+the schedule, sub-schedule, band and applicable Away gates. A child's effective
+disabled read is `parent_disabled OR own_disabled`; `parent_disabled` includes
+all ancestor disable gates. Band records also expose `schedule_disabled` and
+`sub_schedule_disabled`. Parent writes never rewrite descendant preferences.
 Away is reported separately and is not part of this boolean.
+
+Disabling a sub-schedule leaves devices unchanged and suppresses every descendant
+endpoint. Manual enable inside an eligible active band applies Start settings
+once; outside a band it sends no command. Timed expiry uses the same durable
+occurrence journal, revision guards, DST policy, solar resolver and downtime
+coalescing as band expiry. Expiry survives restart without clearing child flags.
+Apply only edits a local draft; Save commits and journals any required resume.
+
+Each schedule has a service device and each sub-schedule groups its own Disabled
+switch and band switches. Core 2026.9+ uses native single-level child devices;
+2026.7/2026.8 use flat service devices. Device identifiers derive from existing
+UUIDs. Entities move by registry association without changing unique/entity IDs
+or user names/icons. Deletion removes only this integration's obsolete controls
+and devices. There is one new entity per sub-schedule, with no band device added.
 
 Writes use the existing serialized, revision-checked UI operations. A concurrent
 configuration change can produce a conflict rather than overwriting newer edits.
