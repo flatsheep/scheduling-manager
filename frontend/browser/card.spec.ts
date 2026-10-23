@@ -15,7 +15,7 @@ async function enableAway(page:Page){await page.getByRole('button',{name:'Away',
 async function pointAt(timeline:Locator,minute:number,y=70) {
   return timeline.locator('svg').evaluate((svg:SVGSVGElement,point)=>{const axis=svg.querySelector<SVGLineElement>('.axis')!;const screen=new DOMPoint(axis.x1.baseVal.value+point.minute/1440*(axis.x2.baseVal.value-axis.x1.baseVal.value),point.y).matrixTransform(svg.getScreenCTM()!);return{x:screen.x,y:screen.y};},{minute,y});
 }
-test.beforeEach(async({page})=>{await page.clock.install({time:new Date('2026-07-06T10:00:00Z')});await page.goto('/');await expect(page.getByRole('heading',{name:'Heating Schedule',exact:true})).toBeVisible();});
+test.beforeEach(async({page})=>{await page.clock.install({time:new Date('2026-07-06T10:00:00Z')});await page.goto('/');await expect(page.getByRole('heading',{name:'Scheduling Manager',exact:true})).toBeVisible();});
 test('sub-schedule disable modal isolates Apply until Save and persists day styling',async({page})=>{
   await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();
   await page.getByRole('button',{name:'Disable sub-schedule',exact:true}).click();
@@ -24,6 +24,14 @@ test('sub-schedule disable modal isolates Apply until Save and persists day styl
   await page.getByRole('button',{name:'Apply',exact:true}).click();
   expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
   expect(await page.evaluate(()=>(window as any).mock.saved.model.schedules[0].sub_schedules[0].enabled)).toBeUndefined();
+  const timeline=page.locator('.editing hsm-timeline');
+  await expect(timeline.locator('.marker.disabled')).toHaveCount(4);
+  await expect(timeline.locator('.marker.start path').first()).toHaveCSS('fill','rgb(85, 85, 85)');
+  await expect(timeline.locator('.marker.end path').first()).toHaveCSS('fill','rgb(85, 85, 85)');
+  await expect(timeline.locator('.disabled-band line').first()).toHaveCSS('stroke','rgb(85, 85, 85)');
+  await timeline.evaluate((el:any)=>el.dispatchEvent(new CustomEvent('band-edit',{detail:el.sub.bands[0],bubbles:true,composed:true})));
+  await expect(page.getByRole('combobox',{name:'Band status',exact:true})).toHaveValue('enabled');
+  await page.getByRole('dialog').getByRole('button',{name:'Cancel',exact:true}).click();
   const day=page.locator('.editing .days .selected').first();
   await expect(day).toHaveCSS('background-color','rgb(0, 0, 0)');
   await expect(day).toHaveCSS('color','rgb(255, 255, 255)');
@@ -35,11 +43,15 @@ test('sub-schedule disable modal isolates Apply until Save and persists day styl
   await page.getByRole('button',{name:'Save',exact:true}).click();
   const row=page.locator('section[aria-label="Schedule 1"]');
   await expect(row.locator('.view-day.disabled-day').first()).toHaveCSS('background-color','rgb(0, 0, 0)');
+  await expect(row.locator('hsm-timeline .marker.disabled')).toHaveCount(4);
   await page.evaluate(()=>(window as any).mock.notify());
   await expect(row.locator('.view-day.disabled-day').first()).toBeVisible();
   await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();
   await page.getByRole('button',{name:'Enable sub-schedule',exact:true}).click();
   await expect(page.getByRole('button',{name:'Disable sub-schedule',exact:true})).toBeVisible();
+  await expect(row.locator('hsm-timeline .marker.disabled')).toHaveCount(0);
+  await expect(row.locator('hsm-timeline .marker.start path').first()).toHaveCSS('fill','rgb(255, 134, 31)');
+  await expect(row.locator('hsm-timeline .marker.end path').first()).toHaveCSS('fill','rgb(0, 158, 220)');
   expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(1);
   await page.getByRole('button',{name:'Save',exact:true}).click();
   await expect(row.locator('.disabled-day')).toHaveCount(0);
@@ -62,8 +74,12 @@ test('sub-schedule expiry updates saved day styling without writes or clearing b
   await page.evaluate(()=>{const mock=(window as any).mock,sub=mock.saved.model.schedules[0].sub_schedules[0];sub.enabled=false;sub.disabled_until='2026-07-06T10:01:00Z';sub.bands[0].enabled=false;mock.notify();});
   const row=page.locator('section[aria-label="Schedule 1"]');
   await expect(row.locator('.disabled-day').first()).toBeVisible();
+  await expect(row.locator('hsm-timeline .marker.disabled')).toHaveCount(4);
   await page.clock.runFor(61000);
   await expect(row.locator('.disabled-day')).toHaveCount(0);
+  await expect(row.locator('hsm-timeline .marker.disabled')).toHaveCount(2);
+  await expect(row.locator('hsm-timeline .marker.start path').nth(0)).toHaveCSS('fill','rgb(85, 85, 85)');
+  await expect(row.locator('hsm-timeline .marker.start path').nth(1)).toHaveCSS('fill','rgb(255, 134, 31)');
   expect(await page.evaluate(()=>(window as any).mock.saved.model.schedules[0].sub_schedules[0].bands[0].enabled)).toBe(false);
   expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
 });
@@ -142,7 +158,7 @@ test('band suspension is saved separately, visible in grey, and can be re-enable
   expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(1);
   expect(await page.evaluate(()=>(window as any).mock.saved.model.schedules[0].sub_schedules[0].bands[1].enabled)).toBe(false);
   await page.getByRole('button',{name:'Save',exact:true}).click();
-  expect(await page.evaluate(()=>(window as any).mock.writes.at(-1).type)).toBe('heating_schedule_manager/save_section');
+  expect(await page.evaluate(()=>(window as any).mock.writes.at(-1).type)).toBe('scheduling_manager/save_section');
   await expect(row.locator('hsm-timeline .disabled-label')).toHaveCount(0);
   expect(await page.evaluate(()=>(window as any).mock.saved.model.schedules[0].sub_schedules[0].bands[1].enabled)).toBeUndefined();
 });
@@ -191,7 +207,7 @@ test('dropdown enabling saves with other edits and retains them on failure',asyn
   await page.getByRole('button',{name:'Save',exact:true}).click();
   expect(await page.evaluate(()=>(window as any).mock.saved.model.schedules[0].sub_schedules[0].bands[1].start_minute)).toBe(750);
   expect(await page.evaluate(()=>(window as any).mock.saved.model.schedules[0].sub_schedules[0].bands[1].enabled)).toBeUndefined();
-  expect(await page.evaluate(()=>(window as any).mock.writes.every((write:any)=>write.type==='heating_schedule_manager/save_section'))).toBe(true);
+  expect(await page.evaluate(()=>(window as any).mock.writes.every((write:any)=>write.type==='scheduling_manager/save_section'))).toBe(true);
 });
 test('dropdown band enable rejects a stale Save and preserves the draft',async({page})=>{
   await page.evaluate(()=>{const mock=(window as any).mock;mock.saved.model.schedules[0].sub_schedules[0].bands[1].enabled=false;mock.notify();});
@@ -267,7 +283,7 @@ test('Away changes global state without cancelling draft, read-only controls dis
 });
 test('header stays pinned while schedules scroll on desktop and phone',async({page})=>{
   await page.evaluate(()=>{const m=(window as any).mock,source=m.saved.model.schedules[0];m.saved.model.schedules=Array.from({length:12},(_,i)=>({...structuredClone(source),id:`scroll-${i}`,name:`Scroll ${i}`}));m.notify();});
-  const header=page.locator('heating-schedule-manager-card header'),row=page.locator('section').first();
+  const header=page.locator('scheduling-manager-card header'),row=page.locator('section').first();
   for(const width of [1500,390]){
     await page.setViewportSize({width,height:844});await page.evaluate(()=>window.scrollTo(0,0));
     const before=(await row.boundingBox())!.y;
@@ -291,7 +307,7 @@ test('Disable and Enable are immediate per-section operations shared across clie
   await page.setViewportSize({width:390,height:844});const phoneBefore=await row.boundingBox();await disable.click();await expect(page.getByRole('button',{name:'Enable Schedule 1',exact:true})).toBeVisible();await expect(page.locator('section[aria-label="Schedule 1"] .disabled-label')).toHaveText('Disabled');await expect.poll(()=>row.evaluate(n=>{const panel=n.querySelector('.schedule-panel')!.getBoundingClientRect(),label=n.querySelector('.disabled-label')!.getBoundingClientRect();return label.top-(panel.bottom);})).toBeGreaterThanOrEqual(0);
   expect((await row.boundingBox())!.x).toBeCloseTo(phoneBefore!.x,1);expect((await row.boundingBox())!.width).toBeCloseTo(phoneBefore!.width,1);
   await expect(page.getByRole('button',{name:'Enable Schedule 1',exact:true})).toHaveCSS('background-color','rgb(35, 173, 75)');
-  expect(await page.evaluate(()=>(window as any).mock.writes[0])).toMatchObject({type:'heating_schedule_manager/set_section_enabled',enabled:false,expected_revision:1});
+  expect(await page.evaluate(()=>(window as any).mock.writes[0])).toMatchObject({type:'scheduling_manager/set_section_enabled',enabled:false,expected_revision:1});
   await page.getByRole('button',{name:'Enable Schedule 1',exact:true}).click();await expect(disable).toBeVisible();
   await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();await expect(page.getByRole('button',{name:'Disable Schedule 1',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'Disable Schedule 2',exact:true}).click();await expect(page.getByRole('alert')).toContainText('unsaved changes');
@@ -299,15 +315,15 @@ test('Disable and Enable are immediate per-section operations shared across clie
   await page.evaluate(()=>{(window as any).mock.saved.editable=false;(window as any).mock.notify();});await expect(disable).toBeDisabled();await expect(page.getByRole('button',{name:'Enable Schedule 2',exact:true})).toBeDisabled();
 });
 test('HA theme colours, simplified labels and vertical marker time labels',async({page})=>{
-  await page.evaluate(()=>{const card=document.querySelector('heating-schedule-manager-card') as HTMLElement;card.style.setProperty('--app-header-background-color','#55294e');card.style.setProperty('--app-header-text-color','#ffe0f0');});
-  await expect(page.locator('heating-schedule-manager-card header')).toHaveCSS('background-color','rgb(85, 41, 78)');await expect(page.locator('.day-box')).toHaveCSS('text-align','center');
+  await page.evaluate(()=>{const card=document.querySelector('scheduling-manager-card') as HTMLElement;card.style.setProperty('--app-header-background-color','#55294e');card.style.setProperty('--app-header-text-color','#ffe0f0');});
+  await expect(page.locator('scheduling-manager-card header')).toHaveCSS('background-color','rgb(85, 41, 78)');await expect(page.locator('.day-box')).toHaveCSS('text-align','center');
   await expect(page.getByText(/Europe\/London/)).toHaveCount(0);await expect(page.getByText(/Saved schedules run/)).toHaveCount(0);await expect(page.getByRole('button',{name:'Edit Schedule 1',exact:true}).locator('ha-icon')).toHaveAttribute('icon','mdi:cog');
   const timeline=page.locator('hsm-timeline').first();await expect(page.locator('.shared-time-label')).toHaveText('11:00');await expect(page.locator('.shared-time-label')).toHaveCSS('border-radius','8px');
   await expect(page.locator('.shared-time-label')).toHaveCSS('font-size','16px');await expect(page.locator('.shared-time-line')).toHaveCSS('width','3.5px');
   expect(await timeline.locator('.marker text').first().getAttribute('transform')).toContain('rotate(-90');
   await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();await expect(page.getByText(/Hold a blank gap/)).toHaveCount(0);
-  const text=await page.locator('heating-schedule-manager-card').evaluate((card:any)=>card.shadowRoot.textContent);expect(text).not.toMatch(/\bdraft\b/i);expect(text).not.toMatch(/\bnow\b/i);
-  await page.evaluate(()=>{const card=document.querySelector('heating-schedule-manager-card') as HTMLElement;for(const [key,value] of Object.entries({'--primary-text-color':'#e6e6e6','--secondary-text-color':'#b8b8b8','--card-background-color':'#20242a','--secondary-background-color':'#2e3440','--primary-color':'#b478c4'}))card.style.setProperty(key,value);});
+  const text=await page.locator('scheduling-manager-card').evaluate((card:any)=>card.shadowRoot.textContent);expect(text).not.toMatch(/\bdraft\b/i);expect(text).not.toMatch(/\bnow\b/i);
+  await page.evaluate(()=>{const card=document.querySelector('scheduling-manager-card') as HTMLElement;for(const [key,value] of Object.entries({'--primary-text-color':'#e6e6e6','--secondary-text-color':'#b8b8b8','--card-background-color':'#20242a','--secondary-background-color':'#2e3440','--primary-color':'#b478c4'}))card.style.setProperty(key,value);});
   await page.screenshot({path:'../artifacts/desktop-dark-edit.png',fullPage:true});
   await page.getByRole('button',{name:'＋ Add time band'}).click();await expect(page.getByRole('button',{name:'Apply',exact:true})).toBeVisible();
 });
@@ -321,7 +337,7 @@ test('timeline labels and markers keep constant proportions across window resizi
     })).toBeLessThan(.001);
     await expect(page.locator('.shared-time-label')).toBeVisible();
     sizes.push(await timeline.evaluate((el:any)=>{
-      const card=document.querySelector('heating-schedule-manager-card') as any;
+      const card=document.querySelector('scheduling-manager-card') as any;
       const rect=card.shadowRoot.querySelector('.shared-time-label').getBoundingClientRect();
       const marker=el.shadowRoot.querySelector('.marker path').getBoundingClientRect();
       return {boxWidth:rect.width,boxHeight:rect.height,markerWidth:marker.width,markerHeight:marker.height};
@@ -343,10 +359,10 @@ test('timeline labels and markers keep constant proportions across window resizi
 });
 test('view title is used and an untitled view has no fallback heading',async({page})=>{
   await expect(page.getByRole('heading',{name:'Ignored card title',exact:true})).toHaveCount(0);
-  await page.evaluate(()=>{const view=document.getElementById('fixture-view') as any;view.lovelace.rawConfig.views[0].title='Lights and Heating';const card=document.querySelector('heating-schedule-manager-card') as any;card.hass=card.hass;});
+  await page.evaluate(()=>{const view=document.getElementById('fixture-view') as any;view.lovelace.rawConfig.views[0].title='Lights and Heating';const card=document.querySelector('scheduling-manager-card') as any;card.hass=card.hass;});
   await expect(page.getByRole('heading',{name:'Lights and Heating',exact:true})).toBeVisible();
-  await page.evaluate(()=>{const view=document.getElementById('fixture-view') as any;delete view.lovelace.rawConfig.views[0].title;const card=document.querySelector('heating-schedule-manager-card') as any;card.hass=card.hass;});
-  await expect(page.locator('heating-schedule-manager-card header h2')).toHaveCount(0);await expect(page.getByRole('button',{name:'＋ Schedule',exact:true})).toBeVisible();
+  await page.evaluate(()=>{const view=document.getElementById('fixture-view') as any;delete view.lovelace.rawConfig.views[0].title;const card=document.querySelector('scheduling-manager-card') as any;card.hass=card.hass;});
+  await expect(page.locator('scheduling-manager-card header h2')).toHaveCount(0);await expect(page.getByRole('button',{name:'＋ Schedule',exact:true})).toBeVisible();
 });
 test('writable entities use independently editable start/end state choices',async({page})=>{
   await page.getByRole('button',{name:'Edit Schedule 1',exact:true}).click();await page.getByRole('button',{name:'＋ Entity',exact:true}).click();
@@ -416,7 +432,7 @@ test('category creation and assignment commit on Save and unused categories disa
 });
 test('category filtering and grouped order are local, watermark stays behind the timeline',async({page})=>{
   await page.evaluate(()=>{const m=(window as any).mock;m.saved.model.schedules[0].category='Heating';m.saved.model.schedules[1].category='Lighting';m.saved.model.schedules[2].category='Heating';m.notify();});
-  const headerButtons=page.locator('heating-schedule-manager-card header button');await expect(headerButtons).toHaveText(['Hide all','☷ Filter','＋ Schedule','Away']);
+  const headerButtons=page.locator('scheduling-manager-card header button');await expect(headerButtons).toHaveText(['Hide all','☷ Filter','＋ Schedule','Away']);
   await expect(page.locator('.category-watermark').first()).toHaveCSS('pointer-events','none');await expect(page.locator('.category-watermark').first()).toHaveCSS('z-index','0');await expect(page.locator('.timeline-region').first()).toHaveCSS('z-index','2');
   await page.getByRole('button',{name:'Filter schedules'}).click();await page.getByRole('checkbox',{name:'Lighting',exact:true}).uncheck();await page.getByRole('button',{name:'Apply',exact:true}).click();expect(await page.locator('section').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('aria-label')))).toEqual(['Schedule 1','Schedule 3']);
   await page.getByRole('button',{name:'Filter schedules'}).click();await page.getByRole('checkbox',{name:'Select all categories',exact:true}).check();await expect(page.getByRole('combobox',{name:'Sort schedules'})).toHaveCount(0);await page.getByRole('button',{name:'Apply',exact:true}).click();expect(await page.locator('section').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('aria-label')))).toEqual(['Schedule 1','Schedule 3','Schedule 2']);
@@ -494,7 +510,7 @@ test('one shared time indicator spans all strips and follows synchronised scroll
 test('reference layout has a lighter theme panel, paired entity grid and inline title/day',async({page})=>{
   await page.setViewportSize({width:1280,height:900});
   await page.evaluate(()=>{
-    const card=document.querySelector('heating-schedule-manager-card') as any,m=(window as any).mock;
+    const card=document.querySelector('scheduling-manager-card') as any,m=(window as any).mock;
     card.style.setProperty('--app-header-background-color','#fa6e5e');card.style.setProperty('--primary-color','#fa6e5e');card.style.setProperty('--card-background-color','#ffffff');
     const model=m.saved.model,s=model.schedules[0],keys=Object.keys(model.entity_settings);
     s.entities=keys.map(entity_key=>({entity_key,target:{value:18,unit:'°C'}}));
@@ -512,9 +528,10 @@ test('reference layout has a lighter theme panel, paired entity grid and inline 
   await page.screenshot({path:'../artifacts/reference-layout-desktop.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'../artifacts/reference-layout-phone.png',fullPage:true});
 });
-test('Scheduling Manager branding and new card tag retain the legacy card alias',async({page})=>{
+test('Scheduling Manager branding registers only the canonical card type',async({page})=>{
   expect(await page.evaluate(()=>(window as any).customCards.find((card:any)=>card.type==='scheduling-manager-card')?.name)).toBe('Scheduling Manager');
-  expect(await page.evaluate(()=>!!customElements.get('scheduling-manager-card')&&!!customElements.get('heating-schedule-manager-card'))).toBe(true);
+  expect(await page.evaluate(()=>!!customElements.get('scheduling-manager-card'))).toBe(true);
+  expect(await page.evaluate(()=>customElements.get(['heating','schedule','manager','card'].join('-')))).toBeUndefined();
 });
 test.describe('monitor touchscreen dragging',()=>{
   test.use({hasTouch:true,viewport:{width:1920,height:1100}});
@@ -744,11 +761,11 @@ test('named No Schedule previews keep status geometry stable and malformed names
 
 test('unrelated hass updates do not render the card but names and availability still update',async({page})=>{
   await page.clock.pauseAt(new Date('2026-07-06T10:01:00Z'));
-  await page.evaluate(async()=>{const card=document.querySelector('heating-schedule-manager-card') as any;card.hass=card.hass;await card.updateComplete;const render=card.render.bind(card);card.auditRenders=0;card.render=()=>{card.auditRenders++;return render();};for(let i=0;i<5;i++)card.hass={...card.hass,states:{...card.hass.states,'sensor.unrelated':{state:String(i),attributes:{friendly_name:'Unrelated'}}}};await card.updateComplete;});
-  expect(await page.locator('heating-schedule-manager-card').evaluate((card:any)=>card.auditRenders)).toBe(0);
-  await page.evaluate(()=>{const card=document.querySelector('heating-schedule-manager-card') as any;card.hass.states['climate.kitchen'].attributes.friendly_name='Renamed Kitchen';card.hass=card.hass;});await expect(page.locator('.entity span').first()).toContainText('Renamed Kitchen');
-  await page.evaluate(()=>{const card=document.querySelector('heating-schedule-manager-card') as any;card.hass.states['climate.kitchen'].state='unavailable';card.hass=card.hass;});await expect(page.locator('.entity span').first()).toContainText('Unavailable');
-  await page.evaluate(()=>{const card=document.querySelector('heating-schedule-manager-card') as any;card.hass.states['climate.kitchen'].state='heat';card.hass=card.hass;});await expect(page.locator('.entity span').first()).not.toContainText('Unavailable');
+  await page.evaluate(async()=>{const card=document.querySelector('scheduling-manager-card') as any;card.hass=card.hass;await card.updateComplete;const render=card.render.bind(card);card.auditRenders=0;card.render=()=>{card.auditRenders++;return render();};for(let i=0;i<5;i++)card.hass={...card.hass,states:{...card.hass.states,'sensor.unrelated':{state:String(i),attributes:{friendly_name:'Unrelated'}}}};await card.updateComplete;});
+  expect(await page.locator('scheduling-manager-card').evaluate((card:any)=>card.auditRenders)).toBe(0);
+  await page.evaluate(()=>{const card=document.querySelector('scheduling-manager-card') as any;card.hass.states['climate.kitchen'].attributes.friendly_name='Renamed Kitchen';card.hass=card.hass;});await expect(page.locator('.entity span').first()).toContainText('Renamed Kitchen');
+  await page.evaluate(()=>{const card=document.querySelector('scheduling-manager-card') as any;card.hass.states['climate.kitchen'].state='unavailable';card.hass=card.hass;});await expect(page.locator('.entity span').first()).toContainText('Unavailable');
+  await page.evaluate(()=>{const card=document.querySelector('scheduling-manager-card') as any;card.hass.states['climate.kitchen'].state='heat';card.hass=card.hass;});await expect(page.locator('.entity span').first()).not.toContainText('Unavailable');
 });
 
 test('fixed Start of a mixed band clamps to solar End for pointer and arrow keys',async({page})=>{
@@ -801,7 +818,7 @@ test('preview never changes running counts and editing survives category collaps
 });
 
 test('large entity lists show six entries and scroll by controls and keyboard on desktop and phone',async({page})=>{
-  await page.evaluate(()=>{const m=(window as any).mock,s=m.saved.model.schedules[0],card=document.querySelector('heating-schedule-manager-card') as any;for(let i=0;i<10;i++){const key=crypto.randomUUID(),entity_id=`climate.office_${i}`;m.saved.model.entity_settings[key]={entity_id,registry_id:null,setback:{value:13,unit:'°C'}};card.hass.states[entity_id]={state:'heat',attributes:{friendly_name:`Office ${i+1}`}};s.entities.push({entity_key:key,target:{value:21,unit:'°C'}});}m.notify();});
+  await page.evaluate(()=>{const m=(window as any).mock,s=m.saved.model.schedules[0],card=document.querySelector('scheduling-manager-card') as any;for(let i=0;i<10;i++){const key=crypto.randomUUID(),entity_id=`climate.office_${i}`;m.saved.model.entity_settings[key]={entity_id,registry_id:null,setback:{value:13,unit:'°C'}};card.hass.states[entity_id]={state:'heat',attributes:{friendly_name:`Office ${i+1}`}};s.entities.push({entity_key:key,target:{value:21,unit:'°C'}});}m.notify();});
   const section=page.locator('section[aria-label="Schedule 1"]'),list=section.locator('.entity-list');
   for(const width of [1600,390]){
     await page.setViewportSize({width,height:1000});await section.scrollIntoViewIfNeeded();await expect(list).toHaveClass(/overflowing/);
@@ -826,7 +843,7 @@ test('large entity lists show six entries and scroll by controls and keyboard on
 test.describe('phone entity scrolling',()=>{
   test.use({hasTouch:true,viewport:{width:390,height:844}});
   test('touch scrolls the bounded entity list without moving the timeline or writing data',async({page})=>{
-    await page.evaluate(()=>{const m=(window as any).mock,s=m.saved.model.schedules[0],card=document.querySelector('heating-schedule-manager-card') as any;for(let i=0;i<10;i++){const key=crypto.randomUUID(),entity_id=`climate.touch_${i}`;m.saved.model.entity_settings[key]={entity_id,registry_id:null,setback:{value:13,unit:'°C'}};card.hass.states[entity_id]={state:'heat',attributes:{friendly_name:`Touch entity ${i+1}`}};s.entities.push({entity_key:key,target:{value:21,unit:'°C'}});}m.notify();});
+    await page.evaluate(()=>{const m=(window as any).mock,s=m.saved.model.schedules[0],card=document.querySelector('scheduling-manager-card') as any;for(let i=0;i<10;i++){const key=crypto.randomUUID(),entity_id=`climate.touch_${i}`;m.saved.model.entity_settings[key]={entity_id,registry_id:null,setback:{value:13,unit:'°C'}};card.hass.states[entity_id]={state:'heat',attributes:{friendly_name:`Touch entity ${i+1}`}};s.entities.push({entity_key:key,target:{value:21,unit:'°C'}});}m.notify();});
     const section=page.locator('section[aria-label="Schedule 1"]'),list=section.locator('.entity-list');await list.scrollIntoViewIfNeeded();
     const box=(await list.boundingBox())!,before=await section.locator('hsm-timeline').boundingBox(),session=await page.context().newCDPSession(page);
     const x=box.x+box.width/2,y=box.y+box.height-15;
@@ -844,7 +861,7 @@ test('new schedule creation works without native randomUUID and opens collapsed 
   await page.evaluate(()=>{Object.defineProperty(crypto,'randomUUID',{value:undefined,configurable:true});});
   await page.getByRole('button',{name:'＋ Schedule',exact:true}).click();await page.getByRole('textbox',{name:'Schedule name'}).fill('Phone schedule');await page.getByRole('button',{name:'Apply',exact:true}).click();
   await expect(page.locator('section.editing')).toBeVisible();await expect(page.getByRole('button',{name:'＋ Entity',exact:true})).toBeVisible();await expect(page.getByRole('dialog')).toHaveCount(0);
-  const ids=await page.locator('heating-schedule-manager-card').evaluate((card:any)=>[card.draft.section.id,card.draft.section.sub_schedules[0].id]);
+  const ids=await page.locator('scheduling-manager-card').evaluate((card:any)=>[card.draft.section.id,card.draft.section.sub_schedules[0].id]);
   expect(ids[0]).not.toBe(ids[1]);for(const id of ids)expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
 });
@@ -874,11 +891,11 @@ test('Away until sends HA-local date/time, displays the saved return and preserv
   await expect(page.getByText('Times use Europe/London.',{exact:true})).toBeVisible();await page.getByLabel('Away return date and time').fill('2026-07-07T12:30');await page.getByRole('button',{name:'Enable Away',exact:true}).click();
   expect(await page.evaluate(()=>(window as any).mock.writes.at(-1))).toMatchObject({away:true,until:'2026-07-07T12:30'});await expect(page.locator('.away-return')).toContainText('12:30');
   await page.getByRole('button',{name:'Away',exact:true}).click();await expect(page.getByRole('radio',{name:'Away until',exact:true})).toBeChecked();await expect(page.getByLabel('Away return date and time')).toHaveValue('2026-07-07T12:30');await page.getByRole('button',{name:'Cancel',exact:true}).click();
-  await page.evaluate(async()=>{const card=document.querySelector('heating-schedule-manager-card') as any;await card.load();});await expect(page.locator('.away-return')).toContainText('12:30');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await context.close();
+  await page.evaluate(async()=>{const card=document.querySelector('scheduling-manager-card') as any;await card.load();});await expect(page.locator('.away-return')).toContainText('12:30');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await context.close();
 });
 
 test('Away shows progress while saving and closes after commit while device updates continue',async({page})=>{
-  await page.evaluate(()=>{const card=document.querySelector('heating-schedule-manager-card') as any,original=card.hass.callWS;card.hass={...card.hass,callWS:async(message:any)=>{if(message.type.endsWith('/set_away')){await new Promise<void>(resolve=>{(window as any).releaseAway=resolve;});(window as any).mock.saved.applying=true;}return original(message);}};});
+  await page.evaluate(()=>{const card=document.querySelector('scheduling-manager-card') as any,original=card.hass.callWS;card.hass={...card.hass,callWS:async(message:any)=>{if(message.type.endsWith('/set_away')){await new Promise<void>(resolve=>{(window as any).releaseAway=resolve;});(window as any).mock.saved.applying=true;}return original(message);}};});
   await page.getByRole('button',{name:'Away',exact:true}).click();await page.getByRole('button',{name:'Enable Away',exact:true}).click();await expect(page.getByText('Setting Away…',{exact:true})).toBeVisible();
   await page.evaluate(()=>(window as any).releaseAway());await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByText('Updating devices…',{exact:true})).toBeVisible();
   await page.evaluate(()=>{(window as any).mock.saved.applying=false;(window as any).mock.notify();});await expect(page.getByText('Updating devices…',{exact:true})).toHaveCount(0);
@@ -889,9 +906,9 @@ test('loading the card through two resource URLs keeps existing tags and one car
   const result=await page.evaluate(async()=>{
     const card=customElements.get('scheduling-manager-card'),timeline=customElements.get('hsm-timeline');
     const secondUrl='/card.js?second-resource';await import(secondUrl);
-    return {sameCard:card===customElements.get('scheduling-manager-card'),sameTimeline:timeline===customElements.get('hsm-timeline'),entries:(window as any).customCards.filter((item:any)=>item.type==='scheduling-manager-card').length,legacy:!!customElements.get('heating-schedule-manager-card')};
+    return {sameCard:card===customElements.get('scheduling-manager-card'),sameTimeline:timeline===customElements.get('hsm-timeline'),entries:(window as any).customCards.filter((item:any)=>item.type==='scheduling-manager-card').length};
   });
-  expect(result).toEqual({sameCard:true,sameTimeline:true,entries:1,legacy:true});expect(errors).toEqual([]);
+  expect(result).toEqual({sameCard:true,sameTimeline:true,entries:1});expect(errors).toEqual([]);
   await expect(page.getByRole('button',{name:'＋ Schedule',exact:true})).toBeVisible();
 });
 

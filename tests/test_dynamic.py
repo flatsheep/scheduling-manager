@@ -6,9 +6,9 @@ from zoneinfo import ZoneInfo
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.sun import get_astral_event_date
-from custom_components.heating_schedule_manager.dynamic import SolarTimes, resolve_band, SOLAR_EVENTS
-from custom_components.heating_schedule_manager.events import compile_events, section_active
-from custom_components.heating_schedule_manager.validation import Invalid, validate
+from custom_components.scheduling_manager.dynamic import SolarTimes, resolve_band, SOLAR_EVENTS
+from custom_components.scheduling_manager.events import compile_events, section_active
+from custom_components.scheduling_manager.validation import Invalid, validate
 from test_backend import fixture, CAP, NOW
 
 UTC = timezone.utc

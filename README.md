@@ -32,8 +32,14 @@ Manual device adjustments stay in place until the next relevant transition.
   for participating schedules, indefinitely or until a chosen time.
 - **HA automation controls**, collapsible categories and area/floor/activity filters.
 
-**Integration and card: 1.12.0 · Home Assistant 2026.7+**
+**Integration and card: 2.0.0 · Home Assistant 2026.7+**
 Tested on HA 2026.7.0, 2026.8.1, 2026.9.4 and 2026.10.1.
+
+**Upgrading from 1.x?** Version 2.0 completes the integration's rename. Follow the
+[one-time migration](docs/MIGRATION.md) to transfer your existing schedules:
+update, restart, add the new integration, then perform the verification restart.
+Action names and the default Away entity change, and device-based automation
+targets need updating. Read the guide before upgrading; do not delete the old entry first.
 
 [Install](#install) · [Quick start](#quick-start) · [One-offs](#one-off-time-bands)
 · [Solar times](#fixed-and-solar-time-bands) · [Pausing](#pause-schedules-or-bands)
@@ -68,9 +74,9 @@ default-catalogue entry.
 <details>
 <summary>Manual installation, YAML cards and older installations</summary>
 
-1. Download [scheduling-manager-1.12.0.zip](https://github.com/flatsheep/scheduling-manager/releases/download/v1.12.0/scheduling-manager-1.12.0.zip)
+1. Download [scheduling-manager-2.0.0.zip](https://github.com/flatsheep/scheduling-manager/releases/download/v2.0.0/scheduling-manager-2.0.0.zip)
    from the release.
-2. Extract `custom_components/heating_schedule_manager/` into your HA
+2. Extract `custom_components/scheduling_manager/` into your HA
    configuration's `custom_components/` directory. Create that directory if needed.
 3. Restart HA, then add the integration and dashboard card as above.
 
@@ -83,14 +89,10 @@ For YAML dashboards:
 type: custom:scheduling-manager-card
 ```
 
-The card loads automatically in YAML mode too. Keep the internal installation
-folder name `heating_schedule_manager`; existing schedules, automation identities
-and `custom:heating-schedule-manager-card` aliases remain compatible.
-
-If upgrading an older manual installation, keep the existing integration and
-remove only obsolete `/local/scheduling-manager-card.js` or
-`/local/heating-schedule-manager-card.js` dashboard resources. Do not delete and
-re-add the integration or its saved schedules.
+The card loads automatically in YAML mode too. The integration folder and domain
+are both `scheduling_manager`. When upgrading from 1.x, use the migration procedure
+before retiring the old installation. Legacy card types and action names are not
+runtime aliases in 2.0.
 
 </details>
 
@@ -263,10 +265,11 @@ and bands. Re-enabling it does not turn a deliberately disabled child back on.
 | --- | --- |
 | <img src="docs/images/sub-schedule-disabled.png" alt="Sub-schedule popup set to Disabled permanently" width="280"> | <img src="docs/images/sub-schedule-disabled-until.png" alt="Sub-schedule popup with Disabled until and a re-enable date/time" width="280"> |
 
-Disabled day groups show black weekday buttons with a red ×; disabled recurring
-bands stay dark grey. Disabling either leaves devices unchanged. Enabling or timed
-expiry applies Start only inside an eligible active recurring interval, respecting
-parent controls and Away.
+Disabled day groups show black weekday buttons with a red ×, and their associated
+bands are greyed out without changing the bands' own enabled settings. Individually
+disabled recurring bands also stay dark grey. Disabling either leaves devices
+unchanged. Enabling or timed expiry applies Start only inside an eligible active
+recurring interval, respecting parent controls and Away.
 
 ![Disabled weekdays with black buttons and red crosses](docs/images/disabled-weekdays.png)
 
@@ -341,13 +344,13 @@ target:
 ```
 
 Use your actual entity ID; the example name is illustrative. `switch.turn_off`
-enables that Disabled control. The separate `switch.heating_schedule_away` works
+enables that Disabled control. The separate `switch.scheduling_manager_away` works
 normally: on enters Away and off returns.
 
 You can also discover and set boolean control paths through HA actions:
 
 ```yaml
-action: heating_schedule_manager.get_disabled
+action: scheduling_manager.get_disabled
 data: {}
 response_variable: schedule_controls
 ```
@@ -355,7 +358,7 @@ response_variable: schedule_controls
 The response lists current paths. To set one:
 
 ```yaml
-action: heating_schedule_manager.set_disabled
+action: scheduling_manager.set_disabled
 data:
   path: schedule_manager.schedule1.weekdays.disabled
   disabled: true

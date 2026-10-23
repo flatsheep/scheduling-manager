@@ -18,9 +18,9 @@ sys.path[:0] = [str(ROOT), str(ROOT / "tests")]
 from homeassistant.const import __version__
 from homeassistant.helpers.storage import Store
 from test_backend import IntegrationTests, fixture, NOW
-from custom_components.heating_schedule_manager.capabilities import cache_valid
-from custom_components.heating_schedule_manager.events import compile_events
-from custom_components.heating_schedule_manager.validation import validate
+from custom_components.scheduling_manager.capabilities import cache_valid
+from custom_components.scheduling_manager.events import compile_events
+from custom_components.scheduling_manager.validation import validate
 
 
 def median_ms(action, iterations=20):

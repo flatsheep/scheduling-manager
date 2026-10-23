@@ -13,9 +13,9 @@ from homeassistant.config_entries import ConfigEntry, ConfigEntries, ConfigEntry
 from homeassistant.auth import auth_manager_from_config
 from homeassistant.setup import async_setup_component
 
-from custom_components.heating_schedule_manager.const import DOMAIN
-from custom_components.heating_schedule_manager.scheduler import Manager
-from custom_components.heating_schedule_manager.config_flow import HeatingScheduleFlow
+from custom_components.scheduling_manager.const import DOMAIN
+from custom_components.scheduling_manager.scheduler import Manager
+from custom_components.scheduling_manager.config_flow import SchedulingManagerFlow
 
 
 class LifecycleTests(unittest.IsolatedAsyncioTestCase):
@@ -23,7 +23,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         from test_backend import NOW, fixture
 
         self.assertTrue(await async_setup_component(self.hass, 'climate', {}))
-        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow', return_value=NOW):
+        with patch('custom_components.scheduling_manager.scheduler.dt_util.utcnow', return_value=NOW):
             entry = ConfigEntry(domain=DOMAIN, title='Scheduling Manager', data={}, options={}, source=SOURCE_USER,
                                 unique_id=DOMAIN, version=1, minor_version=1, discovery_keys={}, subentries_data=[])
             await self.hass.config_entries.async_add(entry)
@@ -69,13 +69,13 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def test_config_entry_setup_switch_api_and_unload(self):
         self.assertTrue(await async_setup_component(self.hass,'climate',{}))
         self.assertTrue(await async_setup_component(self.hass,'websocket_api',{'http':{'server_host':'127.0.0.1','server_port':8123}}))
-        entry=ConfigEntry(domain=DOMAIN,title='Heating Schedule Manager',data={},options={},source=SOURCE_USER,unique_id=DOMAIN,version=1,minor_version=1,discovery_keys={},subentries_data=[])
+        entry=ConfigEntry(domain=DOMAIN,title='Scheduling Manager',data={},options={},source=SOURCE_USER,unique_id=DOMAIN,version=1,minor_version=1,discovery_keys={},subentries_data=[])
         await self.hass.config_entries.async_add(entry)
         self.assertEqual(entry.state,ConfigEntryState.LOADED)
         duplicate=await self.hass.config_entries.flow.async_init(DOMAIN,context={'source':SOURCE_USER})
         self.assertEqual(duplicate['type'],'abort');self.assertIn(duplicate['reason'],('already_configured','single_instance_allowed'))
         await self.hass.async_block_till_done()
-        switch=self.hass.states.get('switch.heating_schedule_away')
+        switch=self.hass.states.get('switch.scheduling_manager_away')
         self.assertIsNotNone(switch);self.assertEqual(switch.state,'off')
         self.assertNotIn(DOMAIN,self.hass.data)
         self.assertNotIn(switch.entity_id,entry.runtime_data.capabilities())
@@ -110,7 +110,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             'min_temp': 7, 'max_temp': 35, 'target_temp_step': .5,
         })
         section, settings = fixture()
-        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow', return_value=NOW.replace(hour=13)):
+        with patch('custom_components.scheduling_manager.scheduler.dt_util.utcnow', return_value=NOW.replace(hour=13)):
             await entry.runtime_data.save_section(0, 'upsert', section['id'], section, settings)
             await self.hass.async_block_till_done()
             sensor = self.hass.states.get('binary_sensor.schedule_downstairs')
@@ -145,7 +145,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         section['sub_schedules'][0]['name'] = 'Weekdays'
         band = section['sub_schedules'][0]['bands'][0]
         band.update(enabled=False, disabled_until='2026-07-06T15:00Z')
-        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow', return_value=NOW.replace(hour=13)):
+        with patch('custom_components.scheduling_manager.scheduler.dt_util.utcnow', return_value=NOW.replace(hour=13)):
             await entry.runtime_data.save_section(0, 'upsert', section['id'], section, settings)
             await self.hass.async_block_till_done()
             controls = [s for s in self.hass.states.async_all('switch') if s.attributes.get('path')]
@@ -196,7 +196,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         await self.hass.config_entries.async_add(entry)
         self.hass.states.async_set('climate.kitchen', 'heat', {'supported_features': 1, 'min_temp': 7, 'max_temp': 35, 'target_temp_step': .5, 'temperature': 20})
         section, settings = fixture()
-        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow', return_value=NOW):
+        with patch('custom_components.scheduling_manager.scheduler.dt_util.utcnow', return_value=NOW):
             await entry.runtime_data.save_section(0, 'upsert', section['id'], section, settings)
             await self.hass.async_block_till_done()
             registry = er.async_get(self.hass)
@@ -222,7 +222,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_flat_device_upgrade_preserves_devices_and_entity_customisations(self):
         from test_backend import NOW, fixture
-        from custom_components.heating_schedule_manager.switch import entry_devices
+        from custom_components.scheduling_manager.switch import entry_devices
 
         await async_setup_component(self.hass, 'climate', {})
         entry = ConfigEntry(domain=DOMAIN, title='Scheduling Manager', data={}, options={}, source=SOURCE_USER,
@@ -230,7 +230,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         await self.hass.config_entries.async_add(entry)
         self.hass.states.async_set('climate.kitchen', 'heat', {'supported_features': 1, 'min_temp': 7, 'max_temp': 35, 'target_temp_step': .5})
         section, settings = fixture()
-        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow', return_value=NOW):
+        with patch('custom_components.scheduling_manager.scheduler.dt_util.utcnow', return_value=NOW):
             # Model a previously supported flat-device installation using only
             # registry APIs. Unload clears HA's per-setup main registrations.
             with patch.object(dr.DeviceRegistry, 'async_get_or_create_child', None, create=True):
@@ -256,7 +256,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def test_existing_registry_migration_hierarchy_and_sub_deletion(self):
         from copy import deepcopy
         from test_backend import NOW, fixture, uid
-        from custom_components.heating_schedule_manager.switch import entry_devices
+        from custom_components.scheduling_manager.switch import entry_devices
 
         await async_setup_component(self.hass, 'climate', {})
         entry = ConfigEntry(domain=DOMAIN, title='Scheduling Manager', data={}, options={}, source=SOURCE_USER,
@@ -280,7 +280,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             entry_type=dr.DeviceEntryType.SERVICE)
         orphan = registry.async_get_or_create('switch', DOMAIN, f'{DOMAIN}_disabled_{orphan_id}',
             config_entry=entry, suggested_object_id='orphan_disabled', device_id=orphan_device.id)
-        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow', return_value=NOW):
+        with patch('custom_components.scheduling_manager.scheduler.dt_util.utcnow', return_value=NOW):
             await entry.runtime_data.save_section(0, 'upsert', section['id'], section, settings)
             await self.hass.async_block_till_done()
             controls = {s.attributes['id']: s for s in self.hass.states.async_all('switch') if s.attributes.get('path')}
@@ -336,7 +336,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         await self.hass.config_entries.async_add(entry)
         self.hass.states.async_set('climate.kitchen', 'heat', {'supported_features': 1, 'min_temp': 7, 'max_temp': 35, 'target_temp_step': .5})
         section, settings = fixture()
-        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow', return_value=NOW):
+        with patch('custom_components.scheduling_manager.scheduler.dt_util.utcnow', return_value=NOW):
             await entry.runtime_data.save_section(0, 'upsert', section['id'], section, settings)
             await self.hass.async_block_till_done()
             control = next(s for s in self.hass.states.async_all('switch') if s.attributes.get('kind') == 'schedule')
@@ -367,7 +367,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         await self.hass.config_entries.async_add(entry)
         self.hass.states.async_set('climate.kitchen', 'heat', {'supported_features': 1, 'min_temp': 7, 'max_temp': 35, 'target_temp_step': .5})
         section, settings = fixture()
-        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow', return_value=NOW):
+        with patch('custom_components.scheduling_manager.scheduler.dt_util.utcnow', return_value=NOW):
             await entry.runtime_data.save_section(0, 'upsert', section['id'], section, settings)
             await self.hass.async_block_till_done()
             path = entry.runtime_data.control_states()[section['id']]['path']
@@ -393,7 +393,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         """Only custom_components is installed: no /config/www or manual resources."""
         from aiohttp.test_utils import TestClient, TestServer
         from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL, add_extra_js_url
-        from custom_components.heating_schedule_manager.frontend import CARD_PATH, CARD_URL
+        from custom_components.scheduling_manager.frontend import CARD_PATH, CARD_URL
 
         entry = ConfigEntry(domain=DOMAIN, title='Scheduling Manager', data={}, options={}, source=SOURCE_USER,
                             unique_id=DOMAIN, version=1, minor_version=1, discovery_keys={}, subentries_data=[])
@@ -414,7 +414,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             response = await client.get(CARD_PATH)
             bundle = await response.read()
             self.assertIn(b'scheduling-manager-card', bundle)
-            alias = await client.get(f'/{DOMAIN}/heating-schedule-manager-card.js')
+            alias = await client.get(f'/{DOMAIN}/scheduling-manager-card.js')
             self.assertEqual(await alias.read(), bundle)
 
             self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
@@ -446,7 +446,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def test_yaml_dashboard_resources_remain_unchanged(self):
         from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL
         from homeassistant.components.lovelace import LOVELACE_DATA
-        from custom_components.heating_schedule_manager.frontend import CARD_URL
+        from custom_components.scheduling_manager.frontend import CARD_URL
 
         resources = [{'url': '/other-yaml-card.js', 'type': 'module'}]
         self.assertTrue(await async_setup_component(self.hass, 'lovelace', {
@@ -489,7 +489,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await async_setup_component(self.hass,'climate',{}))
         mock=MockClimate();await self.hass.data[DATA_COMPONENT].async_add_entities([mock])
         clock=NOW
-        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow',side_effect=lambda:clock):
+        with patch('custom_components.scheduling_manager.scheduler.dt_util.utcnow',side_effect=lambda:clock):
             manager=Manager(self.hass);await manager.start()
             section,settings=fixture(target=20)
             next(iter(settings.values()))['setback']['value']=10
@@ -503,7 +503,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             await manager.stop()
 
     async def test_config_flow_single_instance(self):
-        flow=HeatingScheduleFlow();flow.hass=self.hass
+        flow=SchedulingManagerFlow();flow.hass=self.hass
         flow.context={'source':SOURCE_USER};flow.flow_id='test'
         result=await flow.async_step_user()
         self.assertEqual(result['type'],'form')
@@ -544,7 +544,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         light,select,number=Light(),Select(),Number()
         await self.hass.data[LIGHT].async_add_entities([light]);await self.hass.data[SELECT].async_add_entities([select]);await self.hass.data[NUMBER].async_add_entities([number])
         clock=NOW
-        with patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow',side_effect=lambda:clock):
+        with patch('custom_components.scheduling_manager.scheduler.dt_util.utcnow',side_effect=lambda:clock):
             manager=Manager(self.hass);await manager.start();section,_=fixture();section['entities']=[];settings={}
             for entity,start,end in ((light,'on','off'),(select,'Focus','Relax'),(number,30.5,10)):
                 key=uid();settings[key]={'entity_id':entity.entity_id,'registry_id':None};section['entities'].append({'entity_key':key,'start_state':start,'end_state':end})
@@ -554,7 +554,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(manager.snapshot['runtime']['errors']);await manager.stop()
 
     async def test_official_state_action_service_schemas(self):
-        from custom_components.heating_schedule_manager.actions import state_action
+        from custom_components.scheduling_manager.actions import state_action
         domains={'date':('2026-10-06',{}),'time':('08:30:00',{}),'datetime':('2026-10-06T08:30:00',{}),
                  'input_datetime':('2026-10-06 08:30:00',{'has_date':True,'has_time':True}),
                  'input_select':('Focus',{'options':['Relax','Focus']}),'input_number':(10,{'min':0,'max':100,'step':1}),

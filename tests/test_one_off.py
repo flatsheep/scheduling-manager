@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import test_backend
 from test_backend import NOW, fixture, uid
-from custom_components.heating_schedule_manager.events import compile_events
-from custom_components.heating_schedule_manager.validation import Invalid, validate
+from custom_components.scheduling_manager.events import compile_events
+from custom_components.scheduling_manager.validation import Invalid, validate
 
 
 class OneOffTests(unittest.IsolatedAsyncioTestCase):
@@ -399,7 +399,7 @@ class OneOffTests(unittest.IsolatedAsyncioTestCase):
     async def test_persistence_failure_before_dispatch_and_after_ack(self):
         await self.create()
         self.store.fail = True
-        with self.assertLogs('custom_components.heating_schedule_manager.scheduler', level='ERROR'):
+        with self.assertLogs('custom_components.scheduling_manager.scheduler', level='ERROR'):
             await self.at(12)
         self.assertEqual(self.calls, [])
         self.store.fail = False
@@ -410,7 +410,7 @@ class OneOffTests(unittest.IsolatedAsyncioTestCase):
                 raise OSError('deletion write failed')
             await original(candidate)
         with patch.object(self.store, 'async_save', side_effect=fail_delete):
-            with self.assertLogs('custom_components.heating_schedule_manager.scheduler', level='ERROR'):
+            with self.assertLogs('custom_components.scheduling_manager.scheduler', level='ERROR'):
                 await self.at(16)
         self.assertTrue(self.band()['one_off_run']['end_recorded'])
         await self.restart()

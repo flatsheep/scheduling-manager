@@ -92,16 +92,16 @@ export class SchedulingManagerCard extends LitElement {
     const token=++this.epoch; this.unsubscribe?.(); this.connection=this.hass.connection;
     await this.load();
     try {
-      const unsubscribe = await this.hass.connection.subscribeMessage<Saved>(data=>{if(token===this.epoch){this.saved=data;this.updateClock();}}, {type:'heating_schedule_manager/subscribe'});
+      const unsubscribe = await this.hass.connection.subscribeMessage<Saved>(data=>{if(token===this.epoch){this.saved=data;this.updateClock();}}, {type:'scheduling_manager/subscribe'});
       if(token!==this.epoch)unsubscribe();else this.unsubscribe=unsubscribe;
     } catch(e) {this.fail(e);}
   }
   private async load() {
     if(!this._hass)return;
-    try {this.saved=await this.hass.callWS<Saved>({type:'heating_schedule_manager/get'});this.caps=await this.hass.callWS<Capability[]>({type:'heating_schedule_manager/capabilities'});this.updateClock();} catch(e){this.fail(e);}
+    try {this.saved=await this.hass.callWS<Saved>({type:'scheduling_manager/get'});this.caps=await this.hass.callWS<Capability[]>({type:'scheduling_manager/capabilities'});this.updateClock();} catch(e){this.fail(e);}
   }
   private async refreshCaps():Promise<boolean> {
-    try {this.caps=await this.hass.callWS<Capability[]>({type:'heating_schedule_manager/capabilities'});return true;}
+    try {this.caps=await this.hass.callWS<Capability[]>({type:'scheduling_manager/capabilities'});return true;}
     catch(e){this.fail(e);return false;}
   }
   private updateClock() {const clock=localClock(this.saved?.timezone ?? 'UTC');if(clock.day!==this.clock.day||clock.minute!==this.clock.minute||clock.weekday!==this.clock.weekday)this.clock=clock;}
@@ -168,7 +168,7 @@ export class SchedulingManagerCard extends LitElement {
     const settings:Record<string,Setting>={};
     if(!draft.deleted)for(const member of draft.section.entities)settings[member.entity_key]=draft.settings[member.entity_key];
     try {
-      this.saved=await this.hass.callWS<Saved>({type:'heating_schedule_manager/save_section',expected_revision:draft.revision,operation:draft.deleted?'delete':'upsert',section_id:draft.section.id,...(!draft.deleted?{section:draft.section,settings}:{})});
+      this.saved=await this.hass.callWS<Saved>({type:'scheduling_manager/save_section',expected_revision:draft.revision,operation:draft.deleted?'delete':'upsert',section_id:draft.section.id,...(!draft.deleted?{section:draft.section,settings}:{})});
       this.draft=undefined;this.popup=undefined;
     } catch(e){this.fail(e);} finally {this.busy=false;}
   }
@@ -179,13 +179,13 @@ export class SchedulingManagerCard extends LitElement {
   }
   private async away(enabled:boolean,until?:string|null):Promise<boolean> {
     this.busy=true;this.awayAction=enabled?'on':'off';this.error='';
-    try {this.saved=await this.hass.callWS<Saved>({type:'heating_schedule_manager/set_away',away:enabled,expected_revision:this.saved!.model.revision,...(until!==undefined?{until}:{})});return true;}
+    try {this.saved=await this.hass.callWS<Saved>({type:'scheduling_manager/set_away',away:enabled,expected_revision:this.saved!.model.revision,...(until!==undefined?{until}:{})});return true;}
     catch(e){this.fail(e);return false;}finally{this.busy=false;this.awayAction=undefined;}
   }
   private async toggleSection(section:Section) {
     this.busy=true;this.error='';
     try {
-      this.saved=await this.hass.callWS<Saved>({type:'heating_schedule_manager/set_section_enabled',expected_revision:this.saved!.model.revision,section_id:section.id,enabled:section.enabled===false});
+      this.saved=await this.hass.callWS<Saved>({type:'scheduling_manager/set_section_enabled',expected_revision:this.saved!.model.revision,section_id:section.id,enabled:section.enabled===false});
     } catch(e){this.fail(e);}finally{this.busy=false;}
   }
   private addBand(detail:{start:number;end:number;reason?:string;method?:string}) {
@@ -582,6 +582,5 @@ export class SchedulingManagerCard extends LitElement {
 }
 if(!customElements.get('scheduling-manager-card'))customElements.define('scheduling-manager-card',SchedulingManagerCard);
 // Keep existing dashboards/resources compatible while the visible project name changes.
-if(!customElements.get('heating-schedule-manager-card'))customElements.define('heating-schedule-manager-card',class extends SchedulingManagerCard {});
 (window as any).customCards=(window as any).customCards??[];
 if(!(window as any).customCards.some((card:{type:string})=>card.type==='scheduling-manager-card'))(window as any).customCards.push({type:'scheduling-manager-card',name:'Scheduling Manager',description:'Shared schedules with temperature and state editing.'});

@@ -4,8 +4,8 @@ from datetime import timedelta
 import unittest
 import test_backend as base
 
-from custom_components.heating_schedule_manager.actions import state_value
-from custom_components.heating_schedule_manager.validation import Invalid
+from custom_components.scheduling_manager.actions import state_value
+from custom_components.scheduling_manager.validation import Invalid
 
 
 class StateTests(unittest.IsolatedAsyncioTestCase):

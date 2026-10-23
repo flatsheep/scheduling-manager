@@ -32,7 +32,7 @@ def main() -> None:
         for suite in suites:
             print(f"Checking {suite.name}", flush=True)
             selections = [["--pattern", suite.name]]
-            if suite.name in ("test_lifecycle.py", "test_standards.py"):
+            if suite.name in ("test_lifecycle.py", "test_standards.py", "test_domain_migration.py"):
                 loaded = unittest.defaultTestLoader.discover(str(ROOT / "tests"), pattern=suite.name)
                 selections = [["--test", identifier] for identifier in test_ids(loaded)]
                 del loaded

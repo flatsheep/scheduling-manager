@@ -1,6 +1,6 @@
 # Authenticated WebSocket API · version 1
 
-Scheduling Manager retains the `heating_schedule_manager` namespace and storage/config-entry identities for compatibility after the 1.4.0 display/project rename.
+Scheduling Manager 2.0 uses the `scheduling_manager` integration, action, WebSocket and storage namespace. See [migration](docs/MIGRATION.md) when upgrading from 1.x.
 
 Since 1.8.0, get/subscribe/mutation replies additionally include `active_schedules`
 (section UUID → current running boolean) and `locations` (authorized entity-setting
@@ -16,7 +16,7 @@ Every command uses the existing HA authenticated WebSocket and includes an incre
 
 Each saved section is also exposed as a standard HA `binary_sensor` with a UUID-based unique ID. Its state is on only when the section is enabled, has a currently resolved active band and is not suspended by Away. Its attributes include the schedule ID, name/category, enabled/Away state, members and their start/end values, weekday/band configuration (including dynamic solar endpoints), and the next endpoint. Creating, updating or deleting a section adds, updates or removes its entity. These entities are read-only; schedule mutation remains available only through the authenticated WebSocket commands below.
 
-## `heating_schedule_manager/get`
+## `scheduling_manager/get`
 
 No extra fields. Result:
 ```json
@@ -32,11 +32,11 @@ Schedule/entity shape is described below. `editable` reflects administrator stat
 
 Since integration 1.6.0, results also include `solar_times`: eight HA-local ISO calendar date keys (today through today+7), each mapping `sunrise`, `sunset`, `dawn`, `dusk`, `noon`, `midnight` to an integer local minute or null if that event does not occur. This is computed display data, not part of the persisted model or revision. Location/elevation/timezone changes invalidate calculation caches; ordinary scheduler notifications refresh the table at least daily.
 
-## `heating_schedule_manager/subscribe`
+## `scheduling_manager/subscribe`
 
 No extra fields. Acknowledges with a result, immediately sends an event with the same shape as `get`, then pushes configuration/Away/error updates. Standard HA `unsubscribe_events` with the `subscription` ID removes the subscription; closing the connection also unsubscribes. Subscriptions do not execute schedules.
 
-## `heating_schedule_manager/capabilities`
+## `scheduling_manager/capabilities`
 
 Result is an entity-authorized array. Entries include:
 ```json
@@ -51,7 +51,7 @@ Unavailable saved/cached entities can have `available: false`. Unsupported curre
 
 Non-climate entries use `kind: state | number | text | date | time | datetime`. State entries expose advertised `options`; numbers expose min/max/step/unit, texts expose length/pattern limits. `current` is a live suggestion and is not persisted with the capability cache. Actions are reconstructed from current server metadata, never accepted as arbitrary client service names. The card lists supported writable choices; read-only domains and this manager's own control are excluded.
 
-## `heating_schedule_manager/save_section` (administrator)
+## `scheduling_manager/save_section` (administrator)
 
 Fields:
 - `expected_revision`: nonnegative integer; must match canonical global revision.
@@ -170,7 +170,7 @@ Optional sub-schedule `name` is validated as a string, trimmed, and omitted when
 
 Success returns canonical `get` state after persistence. Physical-device failures are runtime status, not rollback of an accepted configuration. A storage failure **before** commit leaves configuration/event generations unchanged. A command acknowledgement storage failure after commit is separately reported in `storage_error`.
 
-## `heating_schedule_manager/enable_band` (administrator)
+## `scheduling_manager/enable_band` (administrator)
 
 Fields: `expected_revision`, `section_id` (UUID), and `band_id` (UUID).
 This immediate operation enables the saved band and removes its disabled-until
@@ -189,13 +189,13 @@ the existing `applying` status. Revision conflicts retain the caller's draft.
 This programmatic immediate operation remains available, but the card's dropdown
 uses ordinary section Save instead. Cancel cannot undo this API operation.
 
-## `heating_schedule_manager/set_away` (administrator)
+## `scheduling_manager/set_away` (administrator)
 
 Fields: `away` (boolean), `expected_revision` (nonnegative integer), optional `until` (ISO date/time string or null, added in 1.9.0). Offset-free date/time is interpreted in HA's timezone; aware ISO values are absolute. Return times must be future and accompany Away on. The canonical model stores optional `away_until` as UTC ISO. Null makes Away indefinite; omitting until preserves an existing timer when already on. Away off clears it. Updating only the deadline changes revision/timer without device actions or history reset. Stale requests are rejected before the requested mutation; an already-due automatic expiry is processed first. Section Save never carries or overwrites Away.
 
 Expiry disables Away using its real cutover instant and coalesces normal progress after that instant, including downtime. It survives dashboard closure and restarts. Manual off/replacement invalidates stale callbacks. The Away switch exposes `away_until` when timed; external switch on is indefinite when starting and otherwise idempotent.
 
-## `heating_schedule_manager/set_section_enabled` (administrator, added in 1.1.0)
+## `scheduling_manager/set_section_enabled` (administrator, added in 1.1.0)
 
 Fields: `section_id` (UUID), `enabled` (boolean), `expected_revision` (nonnegative integer matching the global revision).
 
@@ -210,9 +210,9 @@ Global Away affects only sections with `away_enabled: true`. Entry queues only n
 The integration exposes native Disabled switches for schedules, sub-schedules and bands, and
 two HA actions through the standard action/REST/WebSocket service APIs:
 
-- `heating_schedule_manager.get_disabled`: optional `path`; response required.
+- `scheduling_manager.get_disabled`: optional `path`; response required.
   One path returns its record. Omitting it returns `{"controls": [records...]}`.
-- `heating_schedule_manager.set_disabled`: required `path` and strict boolean
+- `scheduling_manager.set_disabled`: required `path` and strict boolean
   `disabled`; response optional. When requested, the response is the updated record.
 
 Records include `path`, `kind`, `schedule_id`, schedule name, `disabled`,

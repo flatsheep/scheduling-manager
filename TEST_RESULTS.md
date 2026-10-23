@@ -1,5 +1,42 @@
 # Verification results
 
+## Release 2.0.0: canonical naming and 1.x migration
+
+- Canonical integration folder, domain, actions, WebSocket namespace, Store and
+  entity unique-ID prefix now use `scheduling_manager`. Away uses
+  `switch.scheduling_manager_away`. The old card tag, alias file and static route
+  are removed; old-name handling is isolated to migration code/tests/upgrade docs.
+- **230 backend tests across 12 suites** passed in isolated network-disabled
+  containers on HA **2026.7.0**, **2026.8.1**, **2026.9.4** and **2026.10.1**.
+  This includes **16 real HA migration cases**: live unload, native child-device
+  recreation, identity/customisation preservation, pending/unavailable work,
+  selected one-off progress, collisions, missing old package, orphaned data,
+  interrupted Store/registry/cleanup writes, and restart-gated retirement.
+- Combined line/branch coverage on HA 2026.8.1: **96.26%**, retaining the existing
+  95.1% gate. The migration leaves a small completion receipt for idempotent cleanup.
+- Frontend production build, **26 unit tests** and **84 Chromium tests** passed,
+  including canonical-only registration and inherited disabled-band styling.
+  Ruff lint, selected formatting, mypy and official hassfest passed.
+- The handover keeps the old entry stopped and retains its Store until a
+  verification restart commits HA's delayed entity/device registry writes.
+  Native device IDs are recreated using supported APIs; schedule UUIDs and
+  HA entity-registry identities are retained. User metadata added after initial
+  handover is preserved across verification.
+- Deployed locally with exactly **two explicitly authorised restarts**. HA
+  **2026.10.1** is RUNNING with only `scheduling_manager` loaded. Saved model and
+  revision **132** were preserved. All **43 entity-registry identities**, entity
+  customisations and **18 devices' customisations** transferred; device hierarchy
+  IDs were recreated as documented. All **34 Disabled controls** remain available.
+- Away is now `switch.scheduling_manager_away`. The old config entry and verified
+  obsolete integration folder were retired; its frontend route returns 404 and
+  only the new action namespace is registered. Served frontend bytes match the
+  build, production configuration validation is valid, migration notices cleared,
+  and scheduler storage/device/log errors are zero.
+- All four storage dashboards were inspected through supported APIs; none needed
+  a legacy card-type rewrite, and no dashboard/resources were changed. Verification
+  did not test physical devices. No direct HA storage/database edits, deployment
+   backups or HACS-submission changes were made for this migration.
+
 ## Release 1.12.0: one-offs, sub-schedule controls and documentation
 
 - Release-candidate backend validation on isolated HA **2026.8.1** passed all

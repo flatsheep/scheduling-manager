@@ -11,7 +11,7 @@ coverage, 15 mypy-checked modules and seven formatter-checked lifecycle/API modu
 
 This remains a **custom integration**, not an officially awarded quality tier
 or Core-approved integration. The engineering checklist is
-`custom_components/heating_schedule_manager/quality_scale.yaml`.
+`custom_components/scheduling_manager/quality_scale.yaml`.
 
 ## Implemented
 
@@ -106,7 +106,7 @@ threshold. No crash is ignored/retried; production HA dependencies are unchanged
    package files (or remove the directory for a manual install). Existing
    manually registered legacy scheduler resources can be removed separately;
    unrelated dashboard resources are never modified by the integration.
-4. `.storage/heating_schedule_manager` is deliberately retained for recovery.
+4. `.storage/scheduling_manager` is deliberately retained for recovery.
    To purge it permanently, back it up, remove the integration and delete that
    specific file while HA is stopped.
 

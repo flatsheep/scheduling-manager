@@ -20,14 +20,14 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.setup import async_setup_component
 
 from test_backend import fixture
-from custom_components.heating_schedule_manager import async_setup_entry, async_unload_entry
-from custom_components.heating_schedule_manager import websocket_api as api
-from custom_components.heating_schedule_manager.const import DOMAIN
-from custom_components.heating_schedule_manager.diagnostics import async_get_config_entry_diagnostics
-from custom_components.heating_schedule_manager.runtime import get_manager
-from custom_components.heating_schedule_manager.scheduler import Manager
-from custom_components.heating_schedule_manager.switch import AwaySwitch
-from custom_components.heating_schedule_manager.validation import Invalid
+from custom_components.scheduling_manager import async_setup_entry, async_unload_entry
+from custom_components.scheduling_manager import websocket_api as api
+from custom_components.scheduling_manager.const import DOMAIN
+from custom_components.scheduling_manager.diagnostics import async_get_config_entry_diagnostics
+from custom_components.scheduling_manager.runtime import get_manager
+from custom_components.scheduling_manager.scheduler import Manager
+from custom_components.scheduling_manager.switch import AwaySwitch
+from custom_components.scheduling_manager.validation import Invalid
 
 
 def entry():
@@ -83,7 +83,7 @@ class StandardsTests(unittest.IsolatedAsyncioTestCase):
         config_entry = await self.load()
         self.assertIs(get_manager(self.hass), config_entry.runtime_data)
         self.assertNotIn(DOMAIN, self.hass.data)
-        state = self.hass.states.get("switch.heating_schedule_away")
+        state = self.hass.states.get("switch.scheduling_manager_away")
         self.assertEqual(state.attributes["friendly_name"], "Scheduling Manager Away")
         switch = AwaySwitch(config_entry.runtime_data)
         self.assertTrue(switch.has_entity_name)
@@ -114,16 +114,16 @@ class StandardsTests(unittest.IsolatedAsyncioTestCase):
     async def test_setup_errors_clean_runtime_and_distinguish_transient_failures(self):
         for error, expected in ((OSError("disk busy"), ConfigEntryNotReady), (RuntimeError("unexpected"), RuntimeError), (asyncio.CancelledError(), asyncio.CancelledError)):
             manager = SimpleNamespace(start=AsyncMock(side_effect=error), stop=AsyncMock(), storage_error=None)
-            with patch("custom_components.heating_schedule_manager.Manager", return_value=manager):
+            with patch("custom_components.scheduling_manager.Manager", return_value=manager):
                 with self.assertRaises(expected):
                     await async_setup_entry(self.hass, entry())
             manager.stop.assert_awaited_once()
         manager = SimpleNamespace(start=AsyncMock(), stop=AsyncMock(), storage_error="disk full")
-        with patch("custom_components.heating_schedule_manager.Manager", return_value=manager):
+        with patch("custom_components.scheduling_manager.Manager", return_value=manager):
             with self.assertRaises(ConfigEntryNotReady):
                 await async_setup_entry(self.hass, entry())
         manager.stop.assert_awaited_once()
-        with patch("custom_components.heating_schedule_manager.__version__", "2026.6.0"):
+        with patch("custom_components.scheduling_manager.__version__", "2026.6.0"):
             with self.assertRaises(ConfigEntryError) as raised:
                 await async_setup_entry(self.hass, entry())
         self.assertEqual(raised.exception.translation_key, "unsupported_version")
@@ -221,7 +221,7 @@ class StandardsTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_location_inheritance_overrides_missing_links_and_permission_filtering(self):
         config_entry = await self.load()
-        from custom_components.heating_schedule_manager.presentation import entity_locations
+        from custom_components.scheduling_manager.presentation import entity_locations
         settings = {'inherited': {'entity_id': 'climate.inherited'}, 'override': {'entity_id': 'climate.override'}, 'missing': {'entity_id': 'climate.missing'}}
         entities = {'climate.inherited': SimpleNamespace(area_id=None, device_id='device'), 'climate.override': SimpleNamespace(area_id='office', device_id='device')}
         devices = {'device': SimpleNamespace(area_id='kitchen')}
@@ -229,10 +229,10 @@ class StandardsTests(unittest.IsolatedAsyncioTestCase):
         floors = {'ground': SimpleNamespace(floor_id='ground', name='Ground floor')}
         # Read-only metadata tests use registry records; they do not exercise
         # unrelated native JSON fragment serialization of registry Store files.
-        with patch('custom_components.heating_schedule_manager.presentation.er.async_get', return_value=SimpleNamespace(async_get=entities.get)), \
-             patch('custom_components.heating_schedule_manager.presentation.dr.async_get', return_value=SimpleNamespace(async_get=devices.get)), \
-             patch('custom_components.heating_schedule_manager.presentation.ar.async_get', return_value=SimpleNamespace(async_get_area=areas.get)), \
-             patch('custom_components.heating_schedule_manager.presentation.fr.async_get', return_value=SimpleNamespace(async_get_floor=floors.get)):
+        with patch('custom_components.scheduling_manager.presentation.er.async_get', return_value=SimpleNamespace(async_get=entities.get)), \
+             patch('custom_components.scheduling_manager.presentation.dr.async_get', return_value=SimpleNamespace(async_get=devices.get)), \
+             patch('custom_components.scheduling_manager.presentation.ar.async_get', return_value=SimpleNamespace(async_get_area=areas.get)), \
+             patch('custom_components.scheduling_manager.presentation.fr.async_get', return_value=SimpleNamespace(async_get_floor=floors.get)):
             locations = entity_locations(self.hass, settings)
             self.assertEqual(locations['inherited']['area_name'], 'Kitchen')
             self.assertEqual(locations['inherited']['floor_name'], 'Ground floor')
@@ -260,7 +260,7 @@ class StandardsTests(unittest.IsolatedAsyncioTestCase):
         config_entry = await self.load()
         manager = config_entry.runtime_data
         before = deepcopy(manager.snapshot)
-        with patch('custom_components.heating_schedule_manager.scheduler.async_dispatcher_send') as notify:
+        with patch('custom_components.scheduling_manager.scheduler.async_dispatcher_send') as notify:
             self.hass.bus.async_fire('area_registry_updated', {'action': 'update', 'area_id': 'test'})
             self.hass.bus.async_fire('floor_registry_updated', {'action': 'update', 'floor_id': 'test'})
             await self.hass.async_block_till_done()

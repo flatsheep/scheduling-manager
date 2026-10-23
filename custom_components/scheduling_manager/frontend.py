@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN
 
-CARD_VERSION = "1.12.0"
+CARD_VERSION = "2.0.0"
 CARD_PATH = f"/{DOMAIN}/scheduling-manager-card.js"
 LOADER_PATH = f"/{DOMAIN}/scheduling-manager-loader.js"
 CARD_URL = f"{LOADER_PATH}?v={CARD_VERSION}"
@@ -22,7 +22,6 @@ async def async_setup_assets(hass: HomeAssistant) -> None:
         [
             StaticPathConfig(CARD_PATH, bundle, False),
             StaticPathConfig(LOADER_PATH, loader, False),
-            StaticPathConfig(f"/{DOMAIN}/heating-schedule-manager-card.js", bundle, False),
         ]
     )
 

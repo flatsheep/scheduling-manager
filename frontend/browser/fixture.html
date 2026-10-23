@@ -1,5 +1,5 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Heating Schedule — mocked dashboard</title><style>body{margin:20px;background:#f2f3f4;font-family:Arial}heating-schedule-manager-card{max-width:1600px;margin:auto;--primary-text-color:#202020;--secondary-text-color:#626262;--card-background-color:#fff;--secondary-background-color:#f3f3f3;--primary-color:#286dcc}@media(max-width:500px){body{margin:8px}}</style></head><body>
-<hui-view id="fixture-view"><heating-schedule-manager-card></heating-schedule-manager-card></hui-view>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Scheduling Manager — mocked dashboard</title><style>body{margin:20px;background:#f2f3f4;font-family:Arial}scheduling-manager-card{max-width:1600px;margin:auto;--primary-text-color:#202020;--secondary-text-color:#626262;--card-background-color:#fff;--secondary-background-color:#f3f3f3;--primary-color:#286dcc}@media(max-width:500px){body{margin:8px}}</style></head><body>
+<hui-view id="fixture-view"><scheduling-manager-card></scheduling-manager-card></hui-view>
 <script type="module">
 import '/card.js';
 const id=()=>crypto.randomUUID();
@@ -65,6 +65,6 @@ const hass={states:Object.fromEntries(caps.map(c=>[c.entity_id,{attributes:{frie
   }
   mock.saved.model.revision++;notify();return structuredClone(mock.saved);
 }};
-const view=document.getElementById('fixture-view');view.index=0;view.lovelace={config:{views:[{title:'Generated fallback'}]},rawConfig:{views:[{title:'Heating Schedule'}]}};
-const card=document.querySelector('heating-schedule-manager-card');card.setConfig({title:'Ignored card title'});card.hass=hass;
+const view=document.getElementById('fixture-view');view.index=0;view.lovelace={config:{views:[{title:'Generated fallback'}]},rawConfig:{views:[{title:'Scheduling Manager'}]}};
+const card=document.querySelector('scheduling-manager-card');card.setConfig({title:'Ignored card title'});card.hass=hass;
 </script></body></html>

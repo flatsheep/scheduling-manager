@@ -5,9 +5,10 @@ from typing import Any
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from .const import DOMAIN
+from .migration import LEGACY_DOMAIN
 
 
-class HeatingScheduleFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
+class SchedulingManagerFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
     """HA's flow metaclass registers the domain keyword at runtime."""
 
     VERSION = 1
@@ -16,5 +17,9 @@ class HeatingScheduleFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ig
         await self.async_set_unique_id(DOMAIN)
         self._abort_if_unique_id_configured()
         if user_input is not None:
-            return self.async_create_entry(title="Scheduling Manager", data={})
+            sources = self.hass.config_entries.async_entries(LEGACY_DOMAIN)
+            if len(sources) > 1:
+                return self.async_abort(reason="multiple_legacy_entries")
+            data = {"legacy_entry_id": sources[0].entry_id} if sources else {}
+            return self.async_create_entry(title="Scheduling Manager", data=data)
         return self.async_show_form(step_id="user", data_schema=vol.Schema({}))

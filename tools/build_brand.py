@@ -35,7 +35,7 @@ def main() -> None:
     rows = b''.join(b'\0' + pixels[y * SIZE * 4:(y + 1) * SIZE * 4] for y in range(SIZE))
     image = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', SIZE, SIZE, 8, 6, 0, 0, 0))
              + chunk(b'IDAT', zlib.compress(rows, 9)) + chunk(b'IEND', b''))
-    destination = Path(__file__).resolve().parents[1] / 'custom_components/heating_schedule_manager/brand/icon.png'
+    destination = Path(__file__).resolve().parents[1] / 'custom_components/scheduling_manager/brand/icon.png'
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(image)
     print(destination)

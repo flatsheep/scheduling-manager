@@ -1,6 +1,6 @@
 # Development and verification
 
-Sources: `custom_components/heating_schedule_manager/`, `frontend/src/`, `tests/`.
+Sources: `custom_components/scheduling_manager/`, `frontend/src/`, `tests/`.
 The Lit card uses HA's authenticated connection. Scheduling runs in Python using
 the existing serialized event stream, atomic Store snapshots and desired-command
 journal. See [API contracts](../API.md), [HA standards](../HA_STANDARDS.md),
@@ -21,7 +21,7 @@ npm run test:browser
 
 The build checks version agreement and copies the bundle to `dist/` and the
 integration's `www/` folder, together with license notices. The loader waits for
-HA frontend bootstrap. Both current and legacy card tags remain supported.
+HA frontend bootstrap. Only `custom:scheduling-manager-card` is registered.
 No runtime CDN is required.
 
 Browser tests use a loopback-only mocked dashboard, not a live HA installation.

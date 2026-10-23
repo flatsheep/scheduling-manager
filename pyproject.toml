@@ -1,7 +1,7 @@
 [tool.coverage.run]
 branch = true
 timid = true
-source = ["custom_components.heating_schedule_manager"]
+source = ["custom_components.scheduling_manager"]
 relative_files = true
 
 [tool.coverage.report]
@@ -22,6 +22,6 @@ python_version = "3.13"
 check_untyped_defs = true
 no_implicit_optional = true
 warn_unused_ignores = true
-files = ["custom_components/heating_schedule_manager"]
+files = ["custom_components/scheduling_manager"]
 follow_imports = "silent"
 ignore_missing_imports = true

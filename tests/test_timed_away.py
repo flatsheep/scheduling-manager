@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import test_backend
 from test_backend import fixture, NOW, uid
-from custom_components.heating_schedule_manager.switch import AwaySwitch
-from custom_components.heating_schedule_manager.validation import Invalid, away_time, validate
+from custom_components.scheduling_manager.switch import AwaySwitch
+from custom_components.scheduling_manager.validation import Invalid, away_time, validate
 
 
 class TimedAwayTests(unittest.IsolatedAsyncioTestCase):
@@ -22,7 +22,7 @@ class TimedAwayTests(unittest.IsolatedAsyncioTestCase):
         def timer(hass, action, when):
             self.armed.append(when)
             return lambda: None
-        self.timer_patch = patch('custom_components.heating_schedule_manager.scheduler.async_track_point_in_utc_time', side_effect=timer)
+        self.timer_patch = patch('custom_components.scheduling_manager.scheduler.async_track_point_in_utc_time', side_effect=timer)
         self.timer_patch.start()
         await test_backend.IntegrationTests.asyncSetUp(self)
 
@@ -106,7 +106,7 @@ class TimedAwayTests(unittest.IsolatedAsyncioTestCase):
         calls = len(self.calls)
         self.store.fail = True
         self.clock = NOW.replace(hour=11)
-        with self.assertLogs('custom_components.heating_schedule_manager.scheduler', level='ERROR'):
+        with self.assertLogs('custom_components.scheduling_manager.scheduler', level='ERROR'):
             await self.manager.tick()
         self.assertEqual(self.manager.snapshot, before)
         self.assertEqual(len(self.calls), calls)
@@ -117,8 +117,8 @@ class TimedAwayTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('away_until', self.manager.model)
 
     async def test_time_validation_timezone_dst_and_revision_conflicts(self):
-        from custom_components.heating_schedule_manager.websocket_api import away
-        message = away._ws_schema({'id': 1, 'type': 'heating_schedule_manager/set_away', 'away': True, 'expected_revision': 0, 'until': '2026-07-06T12:00'})
+        from custom_components.scheduling_manager.websocket_api import away
+        message = away._ws_schema({'id': 1, 'type': 'scheduling_manager/set_away', 'away': True, 'expected_revision': 0, 'until': '2026-07-06T12:00'})
         self.assertEqual(message['until'], '2026-07-06T12:00')
         for value in (False, 123, 'invalid', '2026-02-30T12:00', '2026-07-06T09:00Z'):
             with self.assertRaises(Invalid):

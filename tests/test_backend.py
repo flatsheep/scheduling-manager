@@ -12,10 +12,10 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import device_registry as dr
 from homeassistant.const import __version__
 
-from custom_components.heating_schedule_manager.events import compile_events, wall_instant, section_active
-from custom_components.heating_schedule_manager.scheduler import Manager
-from custom_components.heating_schedule_manager.validation import Invalid, validate, temperature
-from custom_components.heating_schedule_manager.websocket_api import visible, mutation
+from custom_components.scheduling_manager.events import compile_events, wall_instant, section_active
+from custom_components.scheduling_manager.scheduler import Manager
+from custom_components.scheduling_manager.validation import Invalid, validate, temperature
+from custom_components.scheduling_manager.websocket_api import visible, mutation
 
 UTC = timezone.utc
 NOW = datetime(2026, 7, 6, 10, tzinfo=UTC)  # Monday
@@ -166,7 +166,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         await dr.async_load(self.hass, load_empty=True)
         await er.async_get(self.hass).async_load()
         self.clock=NOW
-        self.patcher=patch('custom_components.heating_schedule_manager.scheduler.dt_util.utcnow',side_effect=lambda:self.clock)
+        self.patcher=patch('custom_components.scheduling_manager.scheduler.dt_util.utcnow',side_effect=lambda:self.clock)
         self.patcher.start()
         self.calls=[];self.fail_entity=None
         async def climate(call):
@@ -280,7 +280,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         def timer(hass,action,when):
             captured.append(when)
             return lambda:None
-        with patch('custom_components.heating_schedule_manager.scheduler.async_track_point_in_utc_time',side_effect=timer):
+        with patch('custom_components.scheduling_manager.scheduler.async_track_point_in_utc_time',side_effect=timer):
             await self.at(12)
             self.assertEqual(captured[-1],NOW.replace(hour=12,minute=6))
             await self.manager.tick()
@@ -589,7 +589,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         section, settings = fixture()
         await self.save(section, settings)
         await self.hass.async_block_till_done()
-        with patch('custom_components.heating_schedule_manager.scheduler.async_dispatcher_send') as send:
+        with patch('custom_components.scheduling_manager.scheduler.async_dispatcher_send') as send:
             self.manager._notify()
             self.manager._notify()
             self.manager._notify()
@@ -654,7 +654,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
             await original(candidate)
         self.store.async_save = fail_acknowledgement
         self.calls.clear()
-        with patch.object(self.manager, '_arm'), self.assertLogs('custom_components.heating_schedule_manager.scheduler', level='ERROR'):
+        with patch.object(self.manager, '_arm'), self.assertLogs('custom_components.scheduling_manager.scheduler', level='ERROR'):
             result = await self.manager.set_section_enabled(self.manager.model['revision'], section['id'], False)
         self.assertFalse(result['model']['schedules'][0]['enabled'])
         self.assertTrue(self.manager.snapshot['runtime']['pending'])
@@ -671,8 +671,8 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         def timer(hass, action, when):
             armed.append(when)
             return lambda: None
-        with patch('custom_components.heating_schedule_manager.scheduler.async_track_point_in_utc_time', side_effect=timer):
-            with self.assertLogs('custom_components.heating_schedule_manager.scheduler', level='ERROR'):
+        with patch('custom_components.scheduling_manager.scheduler.async_track_point_in_utc_time', side_effect=timer):
+            with self.assertLogs('custom_components.scheduling_manager.scheduler', level='ERROR'):
                 await self.manager.tick()
             self.assertEqual(self.manager.snapshot, before)
             self.assertEqual(self.calls, [])

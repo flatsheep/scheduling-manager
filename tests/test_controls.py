@@ -5,9 +5,9 @@ from unittest.mock import patch
 
 import test_backend
 from test_backend import NOW, fixture, uid
-from custom_components.heating_schedule_manager.controls import control_states
-from custom_components.heating_schedule_manager.services import async_register
-from custom_components.heating_schedule_manager.validation import Invalid
+from custom_components.scheduling_manager.controls import control_states
+from custom_components.scheduling_manager.services import async_register
+from custom_components.scheduling_manager.validation import Invalid
 
 
 def named_fixture():
@@ -216,21 +216,21 @@ class ControlTests(unittest.IsolatedAsyncioTestCase):
         section, settings = named_fixture()
         await self.save(section, settings)
         await async_register(self.hass)
-        with patch('custom_components.heating_schedule_manager.services.get_manager', return_value=self.manager):
-            result = await self.hass.services.async_call('heating_schedule_manager', 'get_disabled', {},
+        with patch('custom_components.scheduling_manager.services.get_manager', return_value=self.manager):
+            result = await self.hass.services.async_call('scheduling_manager', 'get_disabled', {},
                                                          blocking=True, return_response=True)
             self.assertEqual(len(result['controls']), 3)
             path = self.path(section['id'])
-            result = await self.hass.services.async_call('heating_schedule_manager', 'set_disabled',
+            result = await self.hass.services.async_call('scheduling_manager', 'set_disabled',
                                                          {'path': path, 'disabled': True}, blocking=True, return_response=True)
             self.assertIs(result['disabled'], True)
             band = section['sub_schedules'][0]['bands'][0]
             state = self.manager.control_states()[band['id']]
             for alias in (state['path'], state['immutable_path'], state['legacy_paths'][0]):
-                result = await self.hass.services.async_call('heating_schedule_manager', 'get_disabled',
+                result = await self.hass.services.async_call('scheduling_manager', 'get_disabled',
                     {'path': alias}, blocking=True, return_response=True)
                 self.assertEqual(result['id'], band['id'])
                 self.assertTrue(result['parent_disabled'])
-            result = await self.hass.services.async_call('heating_schedule_manager', 'get_disabled',
+            result = await self.hass.services.async_call('scheduling_manager', 'get_disabled',
                                                          {'path': path}, blocking=True, return_response=True)
             self.assertIs(result['disabled'], True)

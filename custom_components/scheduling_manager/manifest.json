@@ -1,5 +1,5 @@
 {
-  "domain": "heating_schedule_manager",
+  "domain": "scheduling_manager",
   "name": "Scheduling Manager",
   "codeowners": ["@flatsheep"],
   "config_flow": true,
@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/flatsheep/scheduling-manager/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "1.12.0"
+  "version": "2.0.0"
 }

@@ -1,3 +1,3 @@
-DOMAIN = "heating_schedule_manager"
+DOMAIN = "scheduling_manager"
 VERSION = 1
 SIGNAL = f"{DOMAIN}_updated"

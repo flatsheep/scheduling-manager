@@ -128,13 +128,15 @@ Outside an active interval it restores future transitions without a command.
 
 Parent controls preserve each descendant's own disable preference. Enabling a
 child never enables its parent. A band shared across weekdays is disabled on all
-of them. One-offs have no individual disable control and do not resume Start
+of them. Bands are greyed out while their sub-schedule is disabled, including in
+day previews. Re-enabling the group restores each band's own visual status.
+One-offs have no individual disable control and do not resume Start
 mid-cycle when a parent is enabled.
 
 ### Away
 
 Each schedule can be **Away included** or **Away excluded**. Included is the
-default. Header Away and `switch.heating_schedule_away` control the same saved flag.
+default. Header Away and `switch.scheduling_manager_away` control the same saved flag.
 The popup offers indefinite Away or **Until…**, in HA's timezone.
 
 Entering Away applies climate setbacks where needed and suspends included normal

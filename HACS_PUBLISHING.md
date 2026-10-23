@@ -5,7 +5,7 @@
 - `manifest.json` classifies Scheduling Manager as a `service`, so its config
   entry is managed in HA's normal Integrations grid, independently of its entities.
 - `hacs.json` supplies the display name and existing HA 2026.7.0 minimum.
-- One integration lives under `custom_components/heating_schedule_manager/`.
+- One integration lives under `custom_components/scheduling_manager/`.
   Its `www/` directory contains the committed, prebuilt card. License notices
   and the original `brand/icon.png` are inside the integration too, so HACS
   downloads the complete application without needing a second frontend repo.
@@ -16,8 +16,8 @@
 - The registered URL is a small loader which waits for `home-assistant` before
   importing Lit/the card, so HA's scoped-registry bootstrap cannot erase the
   card definitions. Loader and bundle URLs both include the card version.
-- The card registers itself in the card picker. Existing card type aliases are
-  retained; duplicate module loads do not redefine custom elements. Older
+- The card registers itself in the card picker. Only the canonical card type is
+  registered; duplicate module loads do not redefine custom elements. Older
   manual installations should remove their obsolete `/local/` scheduler
   resource to avoid loading different old/new versions together.
 - The build verifies the card version against the Python frontend registration
@@ -28,6 +28,10 @@
   not purge saved schedules or restore device targets.
 
 ## Validation and public release
+
+Release **v2.0.0** completes the domain rename. It has only the canonical
+integration directory; existing 1.x installations use the
+[one-time migration](docs/MIGRATION.md). Default-catalogue submission is separate.
 
 1. The repository root already contains `custom_components/` and `hacs.json`.
    The manifest identifies `@flatsheep` and the project's documentation/issues
@@ -44,8 +48,9 @@
 4. Download through HACS as a custom **Integration** repository. Confirm the real
    end-user card-picker installation and the documented upgrade from a manual
    install. Repository validation is not itself an end-to-end installation test.
-5. Release **v1.12.0** contains integration and card **1.12.0**, including one-off
-   bands, sub-schedule controls and a shorter illustrated README. Native
+5. Release **v2.0.0** contains integration and card **2.0.0**, the canonical
+   `scheduling_manager` domain, resumable 1.x migration and inherited disabled-band
+   styling. **v1.12.0** introduced one-off bands and sub-schedule controls. Native
    schedule/band Disabled switches and boolean path actions arrived in **v1.11.0**. Individual band
    controls were introduced in **v1.10.0**. The first public release was
    **v1.9.19** (integration **1.9.4**, card **1.9.19**). The generated ZIP is a

@@ -3,7 +3,7 @@ import {test,expect,type Page} from '@playwright/test';
 test.beforeEach(async({page})=>{
   await page.clock.install({time:new Date('2026-07-06T10:00:00Z')});
   await page.goto('/');
-  await expect(page.getByRole('heading',{name:'Heating Schedule',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Scheduling Manager',exact:true})).toBeVisible();
 });
 
 async function openBand(page:Page,index=0){

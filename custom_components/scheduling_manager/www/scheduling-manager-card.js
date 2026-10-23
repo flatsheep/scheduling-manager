@@ -896,7 +896,7 @@ function bandDisabled(band, now = Date.now()) {
 }
 
 // src/timeline.ts
-var HeatingTimeline = class extends i4 {
+var SchedulingTimeline = class extends i4 {
   constructor() {
     super(...arguments);
     this.sub = { id: "", days: [], bands: [] };
@@ -925,10 +925,15 @@ var HeatingTimeline = class extends i4 {
     svg.compact .axis-label{font-size:8px}
     .active-schedule.dimmed{opacity:.25}.ghost-preview{pointer-events:none}.ghost-connector{stroke:var(--blue,#009edc);stroke-dasharray:7 5;stroke-width:2}.ghost-marker{fill:none;stroke-width:2;stroke-dasharray:4 3}.ghost-marker.start{stroke:var(--orange,#ff861f)}.ghost-marker.end{stroke:var(--blue,#009edc)}.ghost-preview text{fill:var(--primary-text-color,#222);font-weight:700}.ghost-caption{font-size:12px}
     .disabled-preview .ghost-marker,.disabled-preview .ghost-connector{stroke:#555}.disabled-preview .disabled-label{fill:#555}
+    .disabled-preview .ghost-marker{fill:#555;fill-opacity:.15}
   `;
   }
   emit(name, detail) {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+  }
+  disabled(band, sub = this.sub) {
+    const now = Date.now();
+    return bandDisabled(sub, now) || bandDisabled(band, now);
   }
   oneOffBadge(center) {
     return w`<g class="one-off-badge" transform=${`translate(${center} 16) scale(1.3)`} role="img" aria-label="One-off time band"><circle r="10"/><foreignObject x="-7" y="-7" width="14" height="14">${b2`<ha-icon icon="mdi:calendar-clock" aria-hidden="true"></ha-icon>`}</foreignObject></g>`;
@@ -1078,20 +1083,20 @@ var HeatingTimeline = class extends i4 {
     }}>
       <line class="axis" x1="40" y1="108" x2=${this.canvasWidth - 40} y2="108" stroke="currentColor" stroke-width="3"/>
       ${Array.from({ length: 25 }, (_2, hour) => w`<line x1=${x2(hour * 60)} y1="100" x2=${x2(hour * 60)} y2="117" stroke="currentColor"/><text class=${`axis-label ${hour % 2 ? "odd" : ""}`} x=${x2(hour * 60)} y="141" text-anchor="middle">${time(hour * 60)}</text>`)}
-      ${unavailable.map((band, index) => w`<text class=${`unavailable-band ${bandDisabled(band) ? "disabled-label" : ""}`} x="40" y=${18 + index * 14} role=${this.edit ? "button" : "img"} tabindex=${this.edit ? "0" : "-1"} aria-label=${this.edit ? "Edit unavailable dynamic time band" : "Solar event unavailable"} @click=${() => {
+      ${unavailable.map((band, index) => w`<text class=${`unavailable-band ${this.disabled(band) ? "disabled-label" : ""}`} x="40" y=${18 + index * 14} role=${this.edit ? "button" : "img"} tabindex=${this.edit ? "0" : "-1"} aria-label=${this.edit ? "Edit unavailable dynamic time band" : "Solar event unavailable"} @click=${() => {
       if (this.edit) this.emit("band-edit", band);
     }} @keydown=${(e5) => {
       if (this.edit && e5.key === "Enter") {
         this.emit("band-edit", band);
         e5.preventDefault();
       }
-    }}>${bandDisabled(band) ? "Disabled \xB7 " : ""}Solar event unavailable *</text>`)}
+    }}>${this.disabled(band) ? "Disabled \xB7 " : ""}Solar event unavailable *</text>`)}
       <g class=${`active-schedule ${this.previewSub ? "dimmed" : ""}`}>
       ${this.sub.bands.map((b3) => {
       const minutes = resolvedBand(b3, this.solarMinutes);
-      return minutes ? w`<g class=${bandDisabled(b3) ? "disabled-band" : ""}><rect class="band-hit" x=${x2(minutes[0]) + 14} y="30" width=${Math.max(0, x2(minutes[1]) - x2(minutes[0]) - 28)} height="78" fill="transparent" @pointerdown=${(e5) => {
+      return minutes ? w`<g class=${this.disabled(b3) ? "disabled-band" : ""}><rect class="band-hit" x=${x2(minutes[0]) + 14} y="30" width=${Math.max(0, x2(minutes[1]) - x2(minutes[0]) - 28)} height="78" fill="transparent" @pointerdown=${(e5) => {
         if (this.edit) this.down(e5, b3);
-      }}/><line x1=${x2(minutes[0])} y1="78" x2=${x2(minutes[1])} y2="78" stroke="currentColor" stroke-dasharray="6 5" pointer-events="none"/>${bandDisabled(b3) ? w`<text class="disabled-label" x=${x2((minutes[0] + minutes[1]) / 2)} y="24" text-anchor="middle">Disabled</text>` : A}</g>` : A;
+      }}/><line x1=${x2(minutes[0])} y1="78" x2=${x2(minutes[1])} y2="78" stroke="currentColor" stroke-dasharray="6 5" pointer-events="none"/>${this.disabled(b3) ? w`<text class="disabled-label" x=${x2((minutes[0] + minutes[1]) / 2)} y=${b3.one_off ? 126 : 24} text-anchor="middle">Disabled</text>` : A}</g>` : A;
     })}
       ${c4(markers, (marker) => marker.key, ({ key, band: b3, endpoint }) => {
       const start = endpoint === "start_minute";
@@ -1104,7 +1109,7 @@ var HeatingTimeline = class extends i4 {
       const bottom = !start && compact ? 104 : 88;
       const center = x2(minute) + offset;
       const labelY = (top + bottom) / 2;
-      return w`<g data-marker=${key} class="marker ${start ? "start" : "end"} ${b3.one_off ? "one-off" : ""} ${bandDisabled(b3) ? "disabled" : ""} ${key === this.activeMarker ? "selected" : ""}" role="button" tabindex="0" aria-pressed=${key === this.activeMarker} aria-label=${`${b3.one_off ? "One-off. " : ""}${bandDisabled(b3) ? "Disabled. " : ""}${start ? "Target start" : "Setback stop"} ${time(minute)}${minute === 1440 ? " End of day / midnight" : ""}. ${this.edit ? "Enter edits, Delete removes band, arrows adjust five minutes." : "Select to bring forward. Tab selects overlapping markers."}`}
+      return w`<g data-marker=${key} class="marker ${start ? "start" : "end"} ${b3.one_off ? "one-off" : ""} ${this.disabled(b3) ? "disabled" : ""} ${key === this.activeMarker ? "selected" : ""}" role="button" tabindex="0" aria-pressed=${key === this.activeMarker} aria-label=${`${b3.one_off ? "One-off. " : ""}${this.disabled(b3) ? "Disabled. " : ""}${start ? "Target start" : "Setback stop"} ${time(minute)}${minute === 1440 ? " End of day / midnight" : ""}. ${this.edit ? "Enter edits, Delete removes band, arrows adjust five minutes." : "Select to bring forward. Tab selects overlapping markers."}`}
             @pointerdown=${(e5) => this.down(e5, b3, endpoint)}
             @focus=${() => {
         if (this.activeMarker !== key) this.promote(key, true);
@@ -1148,7 +1153,7 @@ var HeatingTimeline = class extends i4 {
       ${this.showCurrentTime ? w`<line class="current-line" x1=${x2(this.minute)} y1="31" x2=${x2(this.minute)} y2="149" stroke="var(--orange,#ff861f)" stroke-width="3.5" pointer-events="none"/>` : A}
       ${this.previewSub ? w`<g class="ghost-preview" role="img" aria-label=${`Preview ${this.previewDay} sub-schedule`}>${this.previewSub.bands.map((band) => {
       const minutes = resolvedBand(band, this.previewSolarMinutes);
-      return minutes ? w`<g class=${`${bandDisabled(band) ? "disabled-preview" : ""} ${band.one_off ? "one-off-preview" : ""}`}><line class="ghost-connector" x1=${x2(minutes[0])} y1="68" x2=${x2(minutes[1])} y2="68"/>${band.one_off ? this.oneOffBadge(x2((minutes[0] + minutes[1]) / 2)) : A}${bandDisabled(band) ? w`<text class="disabled-label" x=${x2((minutes[0] + minutes[1]) / 2)} y="24" text-anchor="middle">Disabled</text>` : A}${["start_minute", "end_minute"].map((endpoint) => {
+      return minutes ? w`<g class=${`${this.disabled(band, this.previewSub) ? "disabled-preview" : ""} ${band.one_off ? "one-off-preview" : ""}`}><line class="ghost-connector" x1=${x2(minutes[0])} y1="68" x2=${x2(minutes[1])} y2="68"/>${band.one_off ? this.oneOffBadge(x2((minutes[0] + minutes[1]) / 2)) : A}${this.disabled(band, this.previewSub) ? w`<text class="disabled-label" x=${x2((minutes[0] + minutes[1]) / 2)} y=${band.one_off ? 126 : 24} text-anchor="middle">Disabled</text>` : A}${["start_minute", "end_minute"].map((endpoint) => {
         const start = endpoint === "start_minute", minute = minutes[start ? 0 : 1], center = x2(minute), dynamic = start ? band.start_dynamic : band.end_dynamic;
         return w`<g class="ghost-endpoint"><path class=${`ghost-marker ${start ? "start" : "end"}`} d=${`M ${center} 108 L ${center - 9} 82 L ${center - 9} 30 L ${center + 9} 30 L ${center + 9} 82 Z`}/><text x=${center} y="56" text-anchor="middle" dominant-baseline="central" transform=${`rotate(-90 ${center} 56)`}>${time(minute)}${dynamic ? " *" : ""}</text></g>`;
       })}</g>` : A;
@@ -1160,7 +1165,7 @@ var HeatingTimeline = class extends i4 {
     </svg>${this.edit ? b2`<div class="marker-tools">${selected ? b2`<button @click=${() => this.emit("band-edit", selected.band)}>Edit times</button><button @click=${() => this.emit("band-delete", selected.band)}>Delete band…</button>` : A}</div>` : A}`;
   }
 };
-if (!customElements.get("hsm-timeline")) customElements.define("hsm-timeline", HeatingTimeline);
+if (!customElements.get("hsm-timeline")) customElements.define("hsm-timeline", SchedulingTimeline);
 
 // src/away.ts
 function localDateTime(zone, date = /* @__PURE__ */ new Date()) {
@@ -1295,7 +1300,7 @@ var SchedulingManagerCard = class extends i4 {
           this.saved = data;
           this.updateClock();
         }
-      }, { type: "heating_schedule_manager/subscribe" });
+      }, { type: "scheduling_manager/subscribe" });
       if (token !== this.epoch) unsubscribe();
       else this.unsubscribe = unsubscribe;
     } catch (e5) {
@@ -1305,8 +1310,8 @@ var SchedulingManagerCard = class extends i4 {
   async load() {
     if (!this._hass) return;
     try {
-      this.saved = await this.hass.callWS({ type: "heating_schedule_manager/get" });
-      this.caps = await this.hass.callWS({ type: "heating_schedule_manager/capabilities" });
+      this.saved = await this.hass.callWS({ type: "scheduling_manager/get" });
+      this.caps = await this.hass.callWS({ type: "scheduling_manager/capabilities" });
       this.updateClock();
     } catch (e5) {
       this.fail(e5);
@@ -1314,7 +1319,7 @@ var SchedulingManagerCard = class extends i4 {
   }
   async refreshCaps() {
     try {
-      this.caps = await this.hass.callWS({ type: "heating_schedule_manager/capabilities" });
+      this.caps = await this.hass.callWS({ type: "scheduling_manager/capabilities" });
       return true;
     } catch (e5) {
       this.fail(e5);
@@ -1477,7 +1482,7 @@ var SchedulingManagerCard = class extends i4 {
     const settings = {};
     if (!draft.deleted) for (const member of draft.section.entities) settings[member.entity_key] = draft.settings[member.entity_key];
     try {
-      this.saved = await this.hass.callWS({ type: "heating_schedule_manager/save_section", expected_revision: draft.revision, operation: draft.deleted ? "delete" : "upsert", section_id: draft.section.id, ...!draft.deleted ? { section: draft.section, settings } : {} });
+      this.saved = await this.hass.callWS({ type: "scheduling_manager/save_section", expected_revision: draft.revision, operation: draft.deleted ? "delete" : "upsert", section_id: draft.section.id, ...!draft.deleted ? { section: draft.section, settings } : {} });
       this.draft = void 0;
       this.popup = void 0;
     } catch (e5) {
@@ -1497,7 +1502,7 @@ var SchedulingManagerCard = class extends i4 {
     this.awayAction = enabled ? "on" : "off";
     this.error = "";
     try {
-      this.saved = await this.hass.callWS({ type: "heating_schedule_manager/set_away", away: enabled, expected_revision: this.saved.model.revision, ...until !== void 0 ? { until } : {} });
+      this.saved = await this.hass.callWS({ type: "scheduling_manager/set_away", away: enabled, expected_revision: this.saved.model.revision, ...until !== void 0 ? { until } : {} });
       return true;
     } catch (e5) {
       this.fail(e5);
@@ -1511,7 +1516,7 @@ var SchedulingManagerCard = class extends i4 {
     this.busy = true;
     this.error = "";
     try {
-      this.saved = await this.hass.callWS({ type: "heating_schedule_manager/set_section_enabled", expected_revision: this.saved.model.revision, section_id: section.id, enabled: section.enabled === false });
+      this.saved = await this.hass.callWS({ type: "scheduling_manager/set_section_enabled", expected_revision: this.saved.model.revision, section_id: section.id, enabled: section.enabled === false });
     } catch (e5) {
       this.fail(e5);
     } finally {
@@ -2188,8 +2193,6 @@ var SchedulingManagerCard = class extends i4 {
   }
 };
 if (!customElements.get("scheduling-manager-card")) customElements.define("scheduling-manager-card", SchedulingManagerCard);
-if (!customElements.get("heating-schedule-manager-card")) customElements.define("heating-schedule-manager-card", class extends SchedulingManagerCard {
-});
 window.customCards = window.customCards ?? [];
 if (!window.customCards.some((card) => card.type === "scheduling-manager-card")) window.customCards.push({ type: "scheduling-manager-card", name: "Scheduling Manager", description: "Shared schedules with temperature and state editing." });
 export {

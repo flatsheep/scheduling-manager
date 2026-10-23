@@ -187,8 +187,7 @@ class AwaySwitch(SwitchEntity):
 
     def __init__(self, manager: Manager) -> None:
         self.manager = manager
-        # Preserve the established default ID and registry unique ID on upgrades.
-        self.entity_id = "switch.heating_schedule_away"
+        self.entity_id = "switch.scheduling_manager_away"
 
     @property
     def is_on(self) -> bool:

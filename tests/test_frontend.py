@@ -8,7 +8,7 @@ import unittest
 from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL, UrlManager
 from homeassistant.core import HomeAssistant
 
-from custom_components.heating_schedule_manager.frontend import CARD_URL, CARD_VERSION, register_card, unregister_card
+from custom_components.scheduling_manager.frontend import CARD_URL, CARD_VERSION, register_card, unregister_card
 
 
 class FrontendTests(unittest.IsolatedAsyncioTestCase):
@@ -31,7 +31,7 @@ class FrontendTests(unittest.IsolatedAsyncioTestCase):
 
     def test_hacs_payload_matches_built_card_and_license_notices(self):
         root = Path(__file__).resolve().parents[1]
-        component = root / 'custom_components/heating_schedule_manager'
+        component = root / 'custom_components/scheduling_manager'
         self.assertEqual(CARD_VERSION, json.loads((root / 'frontend/package.json').read_text())['version'])
         self.assertEqual((component / 'www/scheduling-manager-card.js').read_bytes(),
                          (root / 'dist/scheduling-manager-card.js').read_bytes())

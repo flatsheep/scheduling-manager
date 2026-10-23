@@ -13,6 +13,7 @@ from .const import DOMAIN
 from .frontend import async_setup_assets, register_card, unregister_card
 from .runtime import ScheduleConfigEntry
 from .scheduler import Manager
+from .migration import async_prepare, async_finish
 from .services import async_register as async_register_services
 from .validation import Invalid
 from .websocket_api import register
@@ -38,6 +39,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ScheduleConfigEntry) -> 
         )
     manager = Manager(hass)
     try:
+        migrating = await async_prepare(hass, entry)
         await manager.start()
         if manager.storage_error:
             raise OSError(manager.storage_error)
@@ -70,8 +72,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ScheduleConfigEntry) -> 
     entry.runtime_data = manager
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        if migrating:
+            await async_finish(hass, entry, manager)
         register_card(hass)
     except BaseException:
+        if migrating:
+            await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
         await manager.stop()
         del entry.runtime_data
         raise

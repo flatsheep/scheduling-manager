@@ -7,8 +7,8 @@ import unittest
 import test_backend
 import test_timed_away
 from test_backend import CAP, NOW, fixture, uid
-from custom_components.heating_schedule_manager.events import compile_events, section_active
-from custom_components.heating_schedule_manager.validation import Invalid, validate
+from custom_components.scheduling_manager.events import compile_events, section_active
+from custom_components.scheduling_manager.validation import Invalid, validate
 
 
 class BandTests(unittest.IsolatedAsyncioTestCase):
@@ -317,7 +317,7 @@ class BandTests(unittest.IsolatedAsyncioTestCase):
         await self.at(12)
         before = deepcopy(self.manager.snapshot)
         self.store.fail = True
-        with self.assertLogs('custom_components.heating_schedule_manager.scheduler', level='ERROR'):
+        with self.assertLogs('custom_components.scheduling_manager.scheduler', level='ERROR'):
             await self.at(13)
         self.assertEqual(self.manager.snapshot, before)
         self.assertEqual(self.calls, [])

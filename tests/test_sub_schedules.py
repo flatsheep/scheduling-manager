@@ -6,8 +6,8 @@ import unittest
 import test_backend
 import test_timed_away
 from test_backend import CAP, NOW, fixture
-from custom_components.heating_schedule_manager.events import compile_events, section_active
-from custom_components.heating_schedule_manager.validation import Invalid, validate
+from custom_components.scheduling_manager.events import compile_events, section_active
+from custom_components.scheduling_manager.validation import Invalid, validate
 
 
 class SubScheduleTests(unittest.IsolatedAsyncioTestCase):

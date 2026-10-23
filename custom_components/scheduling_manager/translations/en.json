@@ -3,11 +3,12 @@
     "step": {
       "user": {
         "title": "Scheduling Manager",
-        "description": "Create a shared, local schedule manager. Configure schedules using the companion dashboard card."
+        "description": "Create a shared, local schedule manager. Existing 1.x schedules are migrated when you confirm setup. Configure schedules using the companion dashboard card."
       }
     },
     "abort": {
-      "already_configured": "Only one manager is supported."
+      "already_configured": "Only one manager is supported.",
+      "multiple_legacy_entries": "More than one 1.x manager exists. Resolve the duplicate entries before migrating."
     }
   },
   "entity": {
@@ -47,9 +48,13 @@
     }
   },
   "issues": {
+    "migration_restart": {
+      "title": "Restart to finish the Scheduling Manager migration",
+      "description": "Your schedules are running under Scheduling Manager. Restart Home Assistant once more to commit the transferred entity/device registries and safely retire the stopped 1.x entry and its old schedule Store. Do not delete either integration or its saved data manually. This notice clears automatically after the verification restart."
+    },
     "invalid_storage": {
       "title": "Scheduling Manager cannot load its saved schedules",
-      "description": "The schedule storage is invalid or uses an unsupported format: {error}. The original `.storage/heating_schedule_manager` file has not been replaced. Restore a known-good Home Assistant backup, then reload the integration. Do not delete the original file to clear this issue; doing so would discard saved schedules. This issue clears after successful setup."
+      "description": "The schedule storage is invalid or uses an unsupported format: {error}. The original `.storage/scheduling_manager` file has not been replaced. Restore a known-good Home Assistant backup, then reload the integration. Do not delete the original file to clear this issue; doing so would discard saved schedules. This issue clears after successful setup."
     }
   }
 }
