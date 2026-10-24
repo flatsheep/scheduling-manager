@@ -107,8 +107,12 @@ export class SchedulingTimeline extends LitElement {
     clearTimeout(this.hold);
     const g = this.gesture; this.gesture = undefined;
     if (!g?.band || g.moved) return;
-    if(this.edit&&(g.band.start_dynamic||g.band.end_dynamic)){this.emit('band-edit',g.band);return;}
-    if(this.edit&&!g.endpoint){this.emit('band-edit',g.band);return;}
+    if(this.edit&&(g.band.start_dynamic||g.band.end_dynamic||!g.endpoint)){
+      // Finish the touch's synthetic click before placing a dialog under it.
+      if(event.pointerType==='touch')this.tap=setTimeout(()=>this.emit('band-edit',g.band),0);
+      else this.emit('band-edit',g.band);
+      return;
+    }
     if(g.overlap||!this.edit){
       clearTimeout(this.tap);this.lastTap=undefined;
       const candidates=g.candidates??[];

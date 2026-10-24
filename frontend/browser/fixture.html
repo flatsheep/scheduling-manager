@@ -1,7 +1,12 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Scheduling Manager — mocked dashboard</title><style>body{margin:20px;background:#f2f3f4;font-family:Arial}scheduling-manager-card{max-width:1600px;margin:auto;--primary-text-color:#202020;--secondary-text-color:#626262;--card-background-color:#fff;--secondary-background-color:#f3f3f3;--primary-color:#286dcc}@media(max-width:500px){body{margin:8px}}</style></head><body>
 <hui-view id="fixture-view"><scheduling-manager-card></scheduling-manager-card></hui-view>
 <script type="module">
-import '/card.js';
+if(location.pathname==='/legacy-fixture')await Promise.all([
+  import('/local/scheduling-manager-card.js'),
+  import('/local/heating-schedule-manager-card.js'),
+  import('/loader.js')
+]);
+else await import('/card.js');
 const id=()=>crypto.randomUUID();
 const kitchen=id(), lounge=id(), master=id(),ensuite=id();
 const temperature=value=>({value,unit:'°C'});
@@ -11,6 +16,7 @@ const sub=(days,bands)=>({id:id(),days,bands});
 const section=(name,keys,subs)=>({id:id(),name,enabled:true,entities:keys.map(entity_key=>({entity_key,target:temperature(21)})),sub_schedules:subs});
 window.mock={writes:[],fail:false,subscriptions:[],saved:{editable:true,timezone:'Europe/London',status:{},model:{revision:1,away:false,entity_settings:{[kitchen]:setting('climate.kitchen'),[lounge]:setting('climate.lounge'),[master]:setting('climate.master'),[ensuite]:setting('climate.ensuite')},schedules:[section('Schedule 1',[kitchen,lounge],[sub([0,1,2,3,4,5,6],[band(120,320),band(720,960)])]),section('Schedule 2',[kitchen],[sub([0,1,2,3,4,5,6],[band(720,960)])]),section('Schedule 3',[master,ensuite],[sub([1],[band(720,960)])])]}}};
 const names=['Kitchen','Lounge','Master Bedroom with a long friendly name','Ensuite','Office'];
+mock.unavailable=new URLSearchParams(location.search).has('starting');
 const caps=names.map((name,i)=>({entity_id:['climate.kitchen','climate.lounge','climate.master','climate.ensuite','climate.office'][i],registry_id:null,name,unit:'°C',min:7,max:35,step:.5,current:20,supported:true,available:true}));
 caps.push(
   {entity_id:'light.hall',registry_id:null,name:'Hall Light',kind:'state',options:['on','off'],current:'off',supported:true,available:true},
@@ -36,7 +42,16 @@ const updatePresentation=()=>{
 const notify=()=>{updatePresentation();mock.subscriptions.forEach(fn=>fn(structuredClone(mock.saved)));};
 mock.saved.solar_times=Object.fromEntries(Array.from({length:8},(_,i)=>[`2026-07-${String(6+i).padStart(2,'0')}`,{sunrise:300+i,sunset:1260-i,dawn:260+i,dusk:1300-i,noon:780,midnight:60}]));
 window.mock.notify=notify;
-const hass={states:Object.fromEntries(caps.map(c=>[c.entity_id,{attributes:{friendly_name:c.name}}])),connection:{subscribeMessage:async(fn)=>{mock.subscriptions.push(fn);return()=>{mock.subscriptions=mock.subscriptions.filter(x=>x!==fn);};}},callWS:async msg=>{
+const connectionEvents=new Map();
+mock.connectionEvent=event=>{for(const callback of connectionEvents.get(event)??[])callback();};
+mock.connectionListeners=()=>Array.from(connectionEvents.values()).reduce((total,listeners)=>total+listeners.size,0);
+mock.reads=0;mock.subscribeAttempts=0;
+const hass={states:Object.fromEntries(caps.map(c=>[c.entity_id,{attributes:{friendly_name:c.name}}])),connection:{
+  addEventListener:(event,callback)=>{if(!connectionEvents.has(event))connectionEvents.set(event,new Set());connectionEvents.get(event).add(callback);},
+  removeEventListener:(event,callback)=>connectionEvents.get(event)?.delete(callback),
+  subscribeMessage:async(fn)=>{mock.subscribeAttempts++;if(mock.subscribeUnavailable)throw {code:'unknown_command',message:'Unknown command.'};mock.subscriptions.push(fn);return()=>{mock.subscriptions=mock.subscriptions.filter(x=>x!==fn);};}
+},callWS:async msg=>{
+  mock.reads++;if(mock.unavailable)throw {code:'unknown_command',message:'Unknown command.'};
   if(msg.type.endsWith('/get')){updatePresentation();return structuredClone(mock.saved);}
   if(msg.type.endsWith('/capabilities'))return structuredClone(caps);
   mock.writes.push(structuredClone(msg));

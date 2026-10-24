@@ -14,7 +14,7 @@ type Popup = {kind: 'name'; value: string} | {kind:'entities'; query: string; se
   {kind:'category';choice:string;name:string}|{kind:'filters';filters:ScheduleFilters}|{kind:'preview-subs';sectionId:string}|{kind:'away';mode:'now'|'until';until:string};
 
 export class SchedulingManagerCard extends LitElement {
-  static properties = {hass: {attribute:false,noAccessor:true}, saved:{state:true}, draft:{state:true}, popup:{state:true}, confirmation:{state:true}, error:{state:true}, busy:{state:true}, awayAction:{state:true}, clock:{state:true}, caps:{state:true},filters:{state:true},collapsedCategories:{state:true},sharedTime:{state:true},peek:{state:true}};
+  static properties = {hass: {attribute:false,noAccessor:true}, saved:{state:true}, draft:{state:true}, popup:{state:true}, confirmation:{state:true}, error:{state:true}, connectionMessage:{state:true}, busy:{state:true}, awayAction:{state:true}, clock:{state:true}, caps:{state:true},filters:{state:true},collapsedCategories:{state:true},sharedTime:{state:true},peek:{state:true}};
   private _hass?: Hass;
   private hassViewSignature='';
   saved?: Saved;
@@ -54,6 +54,11 @@ export class SchedulingManagerCard extends LitElement {
   private connection?: Hass['connection'];
   private interval?: ReturnType<typeof setInterval>;
   private epoch = 0;
+  private retry?: ReturnType<typeof setTimeout>;
+  private retryDelay = 1000;
+  private connectionMessage = '';
+  private connectionReady = () => {void this.connect();};
+  private connectionLost = () => {this.stopConnectionAttempt();};
   private confirmation?: {message:string; resolve:(yes:boolean)=>void};
   private beforeClose = (event:BeforeUnloadEvent) => {if(this.draft){event.preventDefault();event.returnValue='';}};
   private resume = () => {this.updateClock();void this.load();};
@@ -81,7 +86,7 @@ export class SchedulingManagerCard extends LitElement {
     if (this._hass) void this.connect();
   }
   disconnectedCallback() {
-    super.disconnectedCallback(); this.epoch++; this.unsubscribe?.(); this.unsubscribe=undefined; this.connection=undefined;
+    super.disconnectedCallback(); this.stopConnectionAttempt(); this.unwatchConnection();
     clearInterval(this.interval); document.removeEventListener('visibilitychange',this.resume);
     window.removeEventListener('beforeunload',this.beforeClose);
     document.removeEventListener('pointerdown',this.peekInteraction,true);document.removeEventListener('keydown',this.peekInteraction,true);clearTimeout(this.peekTimer);this.peekTimer=undefined;this.peek=undefined;
@@ -89,16 +94,48 @@ export class SchedulingManagerCard extends LitElement {
     this.layoutResize?.disconnect();if(this.layoutFrame!==undefined)cancelAnimationFrame(this.layoutFrame);this.layoutFrame=undefined;
   }
   private async connect() {
-    const token=++this.epoch; this.unsubscribe?.(); this.connection=this.hass.connection;
-    await this.load();
+    if(!this.isConnected||!this._hass)return;
+    this.stopConnectionAttempt();
+    const token=this.epoch,connection=this.hass.connection;
+    if(this.connection!==connection){
+      this.unwatchConnection();this.connection=connection;
+      connection.addEventListener?.('ready',this.connectionReady);
+      connection.addEventListener?.('disconnected',this.connectionLost);
+    }
     try {
-      const unsubscribe = await this.hass.connection.subscribeMessage<Saved>(data=>{if(token===this.epoch){this.saved=data;this.updateClock();}}, {type:'scheduling_manager/subscribe'});
+      if(!await this.load(token))return;
+      const unsubscribe = await connection.subscribeMessage<Saved>(data=>{if(token===this.epoch){this.saved=data;this.updateClock();}}, {type:'scheduling_manager/subscribe'});
       if(token!==this.epoch)unsubscribe();else this.unsubscribe=unsubscribe;
-    } catch(e) {this.fail(e);}
+      if(token===this.epoch){this.retryDelay=1000;this.connectionMessage='';}
+    } catch(e) {this.retryConnection(e,token);}
   }
-  private async load() {
-    if(!this._hass)return;
-    try {this.saved=await this.hass.callWS<Saved>({type:'scheduling_manager/get'});this.caps=await this.hass.callWS<Capability[]>({type:'scheduling_manager/capabilities'});this.updateClock();} catch(e){this.fail(e);}
+  private stopConnectionAttempt() {
+    this.epoch++;clearTimeout(this.retry);this.retry=undefined;
+    this.unsubscribe?.();this.unsubscribe=undefined;
+  }
+  private unwatchConnection() {
+    this.connection?.removeEventListener?.('ready',this.connectionReady);
+    this.connection?.removeEventListener?.('disconnected',this.connectionLost);
+    this.connection=undefined;
+  }
+  private retryConnection(error:unknown,token:number) {
+    if(token!==this.epoch||!this.isConnected)return;
+    const failure=error as {code?:string;message?:string};
+    this.connectionMessage=failure?.code==='unknown_command'||failure?.code==='not_loaded'
+      ?'Waiting for Scheduling Manager to finish starting. Retrying automatically…'
+      :`Unable to connect to Scheduling Manager. Retrying automatically… (${failure?.message??String(error)})`;
+    clearTimeout(this.retry);this.retry=setTimeout(()=>void this.connect(),this.retryDelay);
+    this.retryDelay=Math.min(this.retryDelay*2,30000);
+  }
+  private async load(token=this.epoch):Promise<boolean> {
+    if(!this._hass)return false;
+    const hass=this.hass;
+    try {
+      const saved=await hass.callWS<Saved>({type:'scheduling_manager/get'});
+      const caps=await hass.callWS<Capability[]>({type:'scheduling_manager/capabilities'});
+      if(token!==this.epoch||!this.isConnected)return false;
+      this.saved=saved;this.caps=caps;this.updateClock();return true;
+    } catch(e){this.retryConnection(e,token);return false;}
   }
   private async refreshCaps():Promise<boolean> {
     try {this.caps=await this.hass.callWS<Capability[]>({type:'scheduling_manager/capabilities'});return true;}
@@ -508,7 +545,7 @@ export class SchedulingManagerCard extends LitElement {
     if(changes.has('saved')||changes.has('draft')||changes.has('clock')||changes.has('filters')||changes.has('collapsedCategories')||changes.has('peek')||changes.has('popup'))this.queueTimeLayout();
   }
   render() {
-    if(!this.saved)return html`<ha-card><p>Loading Scheduling Manager…</p>${this.error?html`<p role="alert">${this.error}</p>`:nothing}</ha-card>`;
+    if(!this.saved)return html`<ha-card><p>Loading Scheduling Manager…</p>${this.connectionMessage?html`<p role="status">${this.connectionMessage}</p>`:nothing}${this.error?html`<p role="alert">${this.error}</p>`:nothing}</ha-card>`;
     const title=viewTitle(this);
     const options=filterOptions(this.saved.model.schedules,this.saved.locations);
     const filters=normalizeFilters(this.filters,options),filtered=isFiltered(filters);
@@ -519,6 +556,7 @@ export class SchedulingManagerCard extends LitElement {
     const showAll=groups.every(group=>this.collapsedCategories.has(group.key));
     const returnLabel=this.saved.model.away_until?awayUntilLabel(this.saved.model.away_until,this.saved.timezone):'';
     return html`<ha-card><header><div class="header-heading">${title?html`<h2>${title}</h2>`:nothing}<div class="day-box">${this.clock.weekday}</div></div><span class="header-space" aria-hidden="true"></span><div class="category-controls"><button aria-label=${`${showAll?'Show':'Hide'} all categories`} ?disabled=${!groups.length} @click=${()=>this.setAllCategories(groups,!showAll)}>${showAll?'Show all':'Hide all'}</button></div><div class=${`filter-controls ${filtered?'filtered':''}`}>${filtered?html`<button class="remove clear-filter" aria-label="Clear schedule filters" @click=${()=>{this.filters=allFilters();}}>✕</button>`:nothing}<button class=${filtered?'selected':''} aria-label="Filter schedules" aria-pressed=${filtered} @click=${()=>{this.popup={kind:'filters',filters:Object.fromEntries(Object.entries(options).map(([key,values])=>[key,[...(filters[key as keyof ScheduleFilters]??values.map(value=>value.value))]])) as unknown as ScheduleFilters};}}>☷ Filter</button></div><button ?disabled=${!this.saved.editable||this.busy} @click=${async()=>{if(await this.discard())this.popup={kind:'name',value:''};}}>＋ Schedule</button><div class="away-control"><button class=${this.saved.model.away?'selected':'away'} aria-pressed=${this.saved.model.away} ?disabled=${!this.saved.editable||this.busy} title=${this.saved.model.away?returnLabel?`Away until ${returnLabel}`:'Away until you turn it off':'Set Away mode'} @click=${this.openAway}>Away</button>${returnLabel?html`<span class="away-return">Until ${returnLabel}</span>`:nothing}</div></header>
+      ${this.connectionMessage?html`<p role="status">${this.connectionMessage}</p>`:nothing}
       ${this.error&&!this.popup?html`<p class="error" role="alert">${this.error}</p>`:nothing}
       ${this.saved.storage_error?html`<p class="error" role="alert">Storage: ${this.saved.storage_error}</p>`:nothing}
       ${this.saved.applying?html`<p class="device-progress" role="status">Updating devices…</p>`:nothing}

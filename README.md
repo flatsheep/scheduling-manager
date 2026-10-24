@@ -447,9 +447,9 @@ the integration again; permanent data removal is described in
 - [Test results](TEST_RESULTS.md) · [HA standards and removal/recovery](HA_STANDARDS.md).
 - [Development](docs/DEVELOPMENT.md) · [Releases](https://github.com/flatsheep/scheduling-manager/releases).
 
-Developed with substantial AI assistance using **OpenCode**, with requirements,
-design and behaviour directed by the maintainer. Verification includes automated
-tests and use in a real Home Assistant installation.
+This integration was **vibecoded** with substantial AI assistance using **OpenCode**,
+with requirements, design and behaviour directed by the maintainer. Verification
+includes automated tests and use in a real Home Assistant installation.
 
 Licensed under **GNU GPL v3.0**. See [LICENSE](LICENSE) and
 [third-party notices](THIRD_PARTY_NOTICES.md).

@@ -15,6 +15,10 @@ export interface Capability {entity_id: string; registry_id?: string | null; nam
 export interface Hass {
   states: Record<string, {state?:string;attributes: Record<string, any>}>;
   callWS<T>(message: Record<string, unknown>): Promise<T>;
-  connection: {subscribeMessage<T>(callback: (data: T) => void, message: Record<string, unknown>): Promise<() => void>};
+  connection: {
+    subscribeMessage<T>(callback: (data: T) => void, message: Record<string, unknown>): Promise<() => void>;
+    addEventListener?(event: 'ready' | 'disconnected', callback: () => void): void;
+    removeEventListener?(event: 'ready' | 'disconnected', callback: () => void): void;
+  };
 }
 export interface Draft {section: Section; settings: Record<string, Setting>; revision: number; selected: number; deleted: boolean; isNew: boolean}

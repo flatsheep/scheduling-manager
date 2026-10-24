@@ -1,6 +1,11 @@
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 const routes={'/':'browser/fixture.html','/card.js':'../dist/scheduling-manager-card.js','/loader-fixture':'browser/loader.html','/loader.js':'../custom_components/scheduling_manager/www/scheduling-manager-loader.js','/scheduling-manager-card.js':'../dist/scheduling-manager-card.js'};
+routes['/legacy-fixture']='browser/fixture.html';
+routes['/local/scheduling-manager-card.js']='browser/legacy-resource.js';
+routes['/local/heating-schedule-manager-card.js']='browser/legacy-resource.js';
+routes['/scheduling_manager/scheduling-manager-loader.js']=routes['/loader.js'];
+routes['/scheduling_manager/scheduling-manager-card.js']=routes['/card.js'];
 http.createServer(async(req,res)=>{
   const pathname=new URL(req.url,'http://127.0.0.1').pathname;
   const file=routes[pathname];if(!file){res.writeHead(404);res.end();return;}

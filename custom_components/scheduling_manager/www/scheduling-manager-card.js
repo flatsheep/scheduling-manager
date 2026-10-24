@@ -1015,12 +1015,9 @@ var SchedulingTimeline = class extends i4 {
     const g2 = this.gesture;
     this.gesture = void 0;
     if (!g2?.band || g2.moved) return;
-    if (this.edit && (g2.band.start_dynamic || g2.band.end_dynamic)) {
-      this.emit("band-edit", g2.band);
-      return;
-    }
-    if (this.edit && !g2.endpoint) {
-      this.emit("band-edit", g2.band);
+    if (this.edit && (g2.band.start_dynamic || g2.band.end_dynamic || !g2.endpoint)) {
+      if (event.pointerType === "touch") this.tap = setTimeout(() => this.emit("band-edit", g2.band), 0);
+      else this.emit("band-edit", g2.band);
       return;
     }
     if (g2.overlap || !this.edit) {
@@ -1211,6 +1208,14 @@ var SchedulingManagerCard = class extends i4 {
       if (event.type === "pointerdown" && !(inside && day)) this.hidePeek();
     };
     this.epoch = 0;
+    this.retryDelay = 1e3;
+    this.connectionMessage = "";
+    this.connectionReady = () => {
+      void this.connect();
+    };
+    this.connectionLost = () => {
+      this.stopConnectionAttempt();
+    };
     this.beforeClose = (event) => {
       if (this.draft) {
         event.preventDefault();
@@ -1226,7 +1231,7 @@ var SchedulingManagerCard = class extends i4 {
     };
   }
   static {
-    this.properties = { hass: { attribute: false, noAccessor: true }, saved: { state: true }, draft: { state: true }, popup: { state: true }, confirmation: { state: true }, error: { state: true }, busy: { state: true }, awayAction: { state: true }, clock: { state: true }, caps: { state: true }, filters: { state: true }, collapsedCategories: { state: true }, sharedTime: { state: true }, peek: { state: true } };
+    this.properties = { hass: { attribute: false, noAccessor: true }, saved: { state: true }, draft: { state: true }, popup: { state: true }, confirmation: { state: true }, error: { state: true }, connectionMessage: { state: true }, busy: { state: true }, awayAction: { state: true }, clock: { state: true }, caps: { state: true }, filters: { state: true }, collapsedCategories: { state: true }, sharedTime: { state: true }, peek: { state: true } };
   }
   set hass(value) {
     this._hass = value;
@@ -1271,10 +1276,8 @@ var SchedulingManagerCard = class extends i4 {
   }
   disconnectedCallback() {
     super.disconnectedCallback();
-    this.epoch++;
-    this.unsubscribe?.();
-    this.unsubscribe = void 0;
-    this.connection = void 0;
+    this.stopConnectionAttempt();
+    this.unwatchConnection();
     clearInterval(this.interval);
     document.removeEventListener("visibilitychange", this.resume);
     window.removeEventListener("beforeunload", this.beforeClose);
@@ -1290,12 +1293,18 @@ var SchedulingManagerCard = class extends i4 {
     this.layoutFrame = void 0;
   }
   async connect() {
-    const token = ++this.epoch;
-    this.unsubscribe?.();
-    this.connection = this.hass.connection;
-    await this.load();
+    if (!this.isConnected || !this._hass) return;
+    this.stopConnectionAttempt();
+    const token = this.epoch, connection = this.hass.connection;
+    if (this.connection !== connection) {
+      this.unwatchConnection();
+      this.connection = connection;
+      connection.addEventListener?.("ready", this.connectionReady);
+      connection.addEventListener?.("disconnected", this.connectionLost);
+    }
     try {
-      const unsubscribe = await this.hass.connection.subscribeMessage((data) => {
+      if (!await this.load(token)) return;
+      const unsubscribe = await connection.subscribeMessage((data) => {
         if (token === this.epoch) {
           this.saved = data;
           this.updateClock();
@@ -1303,18 +1312,48 @@ var SchedulingManagerCard = class extends i4 {
       }, { type: "scheduling_manager/subscribe" });
       if (token !== this.epoch) unsubscribe();
       else this.unsubscribe = unsubscribe;
+      if (token === this.epoch) {
+        this.retryDelay = 1e3;
+        this.connectionMessage = "";
+      }
     } catch (e5) {
-      this.fail(e5);
+      this.retryConnection(e5, token);
     }
   }
-  async load() {
-    if (!this._hass) return;
+  stopConnectionAttempt() {
+    this.epoch++;
+    clearTimeout(this.retry);
+    this.retry = void 0;
+    this.unsubscribe?.();
+    this.unsubscribe = void 0;
+  }
+  unwatchConnection() {
+    this.connection?.removeEventListener?.("ready", this.connectionReady);
+    this.connection?.removeEventListener?.("disconnected", this.connectionLost);
+    this.connection = void 0;
+  }
+  retryConnection(error, token) {
+    if (token !== this.epoch || !this.isConnected) return;
+    const failure = error;
+    this.connectionMessage = failure?.code === "unknown_command" || failure?.code === "not_loaded" ? "Waiting for Scheduling Manager to finish starting. Retrying automatically\u2026" : `Unable to connect to Scheduling Manager. Retrying automatically\u2026 (${failure?.message ?? String(error)})`;
+    clearTimeout(this.retry);
+    this.retry = setTimeout(() => void this.connect(), this.retryDelay);
+    this.retryDelay = Math.min(this.retryDelay * 2, 3e4);
+  }
+  async load(token = this.epoch) {
+    if (!this._hass) return false;
+    const hass = this.hass;
     try {
-      this.saved = await this.hass.callWS({ type: "scheduling_manager/get" });
-      this.caps = await this.hass.callWS({ type: "scheduling_manager/capabilities" });
+      const saved = await hass.callWS({ type: "scheduling_manager/get" });
+      const caps = await hass.callWS({ type: "scheduling_manager/capabilities" });
+      if (token !== this.epoch || !this.isConnected) return false;
+      this.saved = saved;
+      this.caps = caps;
       this.updateClock();
+      return true;
     } catch (e5) {
-      this.fail(e5);
+      this.retryConnection(e5, token);
+      return false;
     }
   }
   async refreshCaps() {
@@ -2095,7 +2134,7 @@ var SchedulingManagerCard = class extends i4 {
     if (changes.has("saved") || changes.has("draft") || changes.has("clock") || changes.has("filters") || changes.has("collapsedCategories") || changes.has("peek") || changes.has("popup")) this.queueTimeLayout();
   }
   render() {
-    if (!this.saved) return b2`<ha-card><p>Loading Scheduling Manager…</p>${this.error ? b2`<p role="alert">${this.error}</p>` : A}</ha-card>`;
+    if (!this.saved) return b2`<ha-card><p>Loading Scheduling Manager…</p>${this.connectionMessage ? b2`<p role="status">${this.connectionMessage}</p>` : A}${this.error ? b2`<p role="alert">${this.error}</p>` : A}</ha-card>`;
     const title = viewTitle(this);
     const options = filterOptions(this.saved.model.schedules, this.saved.locations);
     const filters = normalizeFilters(this.filters, options), filtered = isFiltered(filters);
@@ -2112,6 +2151,7 @@ var SchedulingManagerCard = class extends i4 {
     }}>☷ Filter</button></div><button ?disabled=${!this.saved.editable || this.busy} @click=${async () => {
       if (await this.discard()) this.popup = { kind: "name", value: "" };
     }}>＋ Schedule</button><div class="away-control"><button class=${this.saved.model.away ? "selected" : "away"} aria-pressed=${this.saved.model.away} ?disabled=${!this.saved.editable || this.busy} title=${this.saved.model.away ? returnLabel ? `Away until ${returnLabel}` : "Away until you turn it off" : "Set Away mode"} @click=${this.openAway}>Away</button>${returnLabel ? b2`<span class="away-return">Until ${returnLabel}</span>` : A}</div></header>
+      ${this.connectionMessage ? b2`<p role="status">${this.connectionMessage}</p>` : A}
       ${this.error && !this.popup ? b2`<p class="error" role="alert">${this.error}</p>` : A}
       ${this.saved.storage_error ? b2`<p class="error" role="alert">Storage: ${this.saved.storage_error}</p>` : A}
       ${this.saved.applying ? b2`<p class="device-progress" role="status">Updating devices…</p>` : A}
