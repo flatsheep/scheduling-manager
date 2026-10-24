@@ -5,7 +5,9 @@ import unittest
 from zoneinfo import ZoneInfo
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.importlib import async_import_module
 from homeassistant.helpers.sun import get_astral_event_date
+from homeassistant.util import dt as dt_util
 from custom_components.scheduling_manager.dynamic import SolarTimes, resolve_band, SOLAR_EVENTS
 from custom_components.scheduling_manager.events import compile_events, section_active
 from custom_components.scheduling_manager.validation import Invalid, validate
@@ -36,11 +38,11 @@ class DynamicTests(unittest.TestCase):
         band["start_dynamic"] = {"event": "sunrise", "offset": -17}
         band["end_dynamic"] = {"event": "sunset", "offset": 30}
         solar = lambda day, event: (360 if event == "sunrise" else 1200) + day.day - 6
-        events = compile_events({"revision": 1, "schedules": [section]}, "UTC", NOW.replace(hour=0), NOW + timedelta(days=2), solar)
+        events = compile_events({"revision": 1, "schedules": [section]}, UTC, NOW.replace(hour=0), NOW + timedelta(days=2), solar)
         self.assertEqual([(e.endpoint, e.instant.hour, e.instant.minute) for e in events],
                          [("start", 5, 43), ("end", 20, 30), ("start", 5, 44), ("end", 20, 31)])
-        self.assertTrue(section_active(section, "UTC", NOW, solar))
-        self.assertFalse(section_active(section, "UTC", NOW.replace(hour=21), solar))
+        self.assertTrue(section_active(section, UTC, NOW, solar))
+        self.assertFalse(section_active(section, UTC, NOW.replace(hour=21), solar))
 
     def test_crossed_dynamic_pair_collapses_and_only_end_fires(self):
         section, _ = fixture(start=720, end=960)
@@ -49,10 +51,10 @@ class DynamicTests(unittest.TestCase):
         solar = lambda day, event: 1200
         self.assertEqual(resolve_band(band, NOW.date(), solar), (1440, 1440))
         model = {"revision": 1, "schedules": [section]}
-        events = compile_events(model, "UTC", NOW, NOW + timedelta(days=1), solar)
+        events = compile_events(model, UTC, NOW, NOW + timedelta(days=1), solar)
         self.assertEqual([e.endpoint for e in events], ["end"])
         self.assertEqual(events[0].instant, NOW.replace(hour=0) + timedelta(days=1))
-        self.assertFalse(section_active(section, "UTC", NOW.replace(hour=16), solar))
+        self.assertFalse(section_active(section, UTC, NOW.replace(hour=16), solar))
         del band["start_dynamic"]
         band["end_dynamic"] = {"event": "sunrise", "offset": -300}
         self.assertEqual(resolve_band(band, NOW.date(), lambda *args: 360), (720, 720))
@@ -68,8 +70,8 @@ class DynamicTests(unittest.TestCase):
         self.assertEqual(resolve_band(band, NOW.date(), solar), (0, 1440))
         missing = lambda *args: None
         self.assertIsNone(resolve_band(band, NOW.date(), missing))
-        self.assertEqual(compile_events({"revision": 0, "schedules": [section]}, "UTC", NOW, NOW+timedelta(days=1), missing), [])
-        self.assertFalse(section_active(section, "UTC", NOW, missing))
+        self.assertEqual(compile_events({"revision": 0, "schedules": [section]}, UTC, NOW, NOW+timedelta(days=1), missing), [])
+        self.assertFalse(section_active(section, UTC, NOW, missing))
 
 
 class SolarHelperTests(unittest.IsolatedAsyncioTestCase):
@@ -79,13 +81,15 @@ class SolarHelperTests(unittest.IsolatedAsyncioTestCase):
         self.hass.config.latitude = 51.5
         self.hass.config.longitude = -0.1
         self.hass.config.time_zone = "Europe/London"
+        self.zone = await dt_util.async_get_time_zone(self.hass.config.time_zone)
+        await async_import_module(self.hass, "astral.sun")
 
     async def asyncTearDown(self):
         await self.hass.async_block_till_done()
         self.tmp.cleanup()
 
     async def test_actual_ha_solar_helper_all_events_timezone_and_location_refresh(self):
-        solar = SolarTimes(self.hass)
+        solar = SolarTimes(self.hass, self.zone)
         day = date(2026, 7, 6)
         for event in SOLAR_EVENTS:
             minute = solar(day, event)
@@ -97,6 +101,7 @@ class SolarHelperTests(unittest.IsolatedAsyncioTestCase):
         self.hass.config.longitude = 20
         self.assertNotEqual(solar(day, "sunrise"), old)
         self.hass.config.time_zone = "Asia/Kolkata"
+        solar.zone = await dt_util.async_get_time_zone(self.hass.config.time_zone)
         self.hass.config.latitude = 22.5
         self.hass.config.longitude = 88.3
         for event in SOLAR_EVENTS:
@@ -104,10 +109,10 @@ class SolarHelperTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_polar_missing_sunrise_is_none_not_an_arbitrary_day(self):
         self.hass.config.latitude = 89
-        self.assertIsNone(SolarTimes(self.hass)(date(2026, 6, 21), "sunrise"))
+        self.assertIsNone(SolarTimes(self.hass, self.zone)(date(2026, 6, 21), "sunrise"))
 
     async def test_dst_date_changes_use_ha_location_and_local_calendar(self):
-        solar = SolarTimes(self.hass)
+        solar = SolarTimes(self.hass, self.zone)
         for day in (date(2026, 3, 28), date(2026, 3, 29), date(2026, 10, 25)):
             expected = get_astral_event_date(self.hass, "sunrise", day).astimezone(ZoneInfo("Europe/London"))
             self.assertEqual(solar(day, "sunrise"), expected.hour*60+expected.minute)

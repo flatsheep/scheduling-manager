@@ -5,7 +5,7 @@ Run inside an isolated HA release container with a read-only project mount:
 """
 import asyncio
 from copy import deepcopy
-from datetime import timedelta
+from datetime import timedelta, timezone
 import json
 from pathlib import Path
 import statistics
@@ -59,8 +59,8 @@ async def benchmark(size):
             "snapshot_bytes": len(json.dumps(harness.manager.snapshot)),
             "editor_full_discovery_ms": median_ms(harness.manager.capabilities),
             "snapshot_copy_ms": median_ms(lambda: deepcopy(harness.manager.snapshot)),
-            "compile_8_days_ms": median_ms(lambda: compile_events(model, "UTC", NOW, NOW + timedelta(days=8))),
-            "compile_26_year_downtime_ms": median_ms(lambda: compile_events(model, "UTC", NOW.replace(year=2000), NOW)),
+            "compile_8_days_ms": median_ms(lambda: compile_events(model, timezone.utc, NOW, NOW + timedelta(days=8))),
+            "compile_26_year_downtime_ms": median_ms(lambda: compile_events(model, timezone.utc, NOW.replace(year=2000), NOW)),
             "public_warm_ms": median_ms(harness.manager.public),
         }
         counts = {"writes": 0, "full_capability_scans": 0, "targeted_entity_reads": 0}

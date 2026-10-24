@@ -1,7 +1,6 @@
 """Pure local-calendar event compilation, including DST gap/fold policy."""
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 from .dynamic import resolve_band
 from .bands import band_disabled
 from .validation import away_time
@@ -37,9 +36,8 @@ class Event:
     one_off: dict | None = None
 
 
-def compile_events(model, zone_name, after, through, solar=None):
+def compile_events(model, zone, after, through, solar=None):
     """At most eight recent recurrence days suffice for final downtime effects."""
-    zone = ZoneInfo(zone_name)
     first = max(after.astimezone(zone).date() - timedelta(days=1),
                 through.astimezone(zone).date() - timedelta(days=8))
     last = through.astimezone(zone).date()
@@ -119,13 +117,12 @@ def compile_events(model, zone_name, after, through, solar=None):
     return filtered
 
 
-def band_active(sub, band, zone_name, instant, solar=None):
+def band_active(sub, band, zone, instant, solar=None):
     """Whether this particular band is active on its assigned local weekday."""
     if band.get("one_off"):
         run = band.get("one_off_run")
         return bool(run and not band_disabled(sub, instant) and
                     datetime.fromisoformat(run["start"]) <= instant < datetime.fromisoformat(run["end"]))
-    zone = ZoneInfo(zone_name)
     day = instant.astimezone(zone).date()
     if day.weekday() not in sub["days"] or band_disabled(sub, instant) or band_disabled(band, instant):
         return False
@@ -134,11 +131,11 @@ def band_active(sub, band, zone_name, instant, solar=None):
             wall_instant(day, resolved[0], zone) <= instant < wall_instant(day, resolved[1], zone))
 
 
-def section_active(section, zone_name, instant, solar=None, recurring_only=False):
+def section_active(section, zone, instant, solar=None, recurring_only=False):
     """Match real start/end instants, including the configured DST gap/fold policy."""
     if not section.get("enabled", True):
         return False
     return any(
-        band_active(sub, band, zone_name, instant, solar)
+        band_active(sub, band, zone, instant, solar)
         for sub in section["sub_schedules"] for band in sub["bands"] if not (recurring_only and band.get("one_off"))
     )

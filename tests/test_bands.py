@@ -85,11 +85,12 @@ class BandTests(unittest.IsolatedAsyncioTestCase):
             section, settings = fixture()
             section['sub_schedules'][0]['bands'][0].update(enabled=False, disabled_until=NOW.replace(hour=hour).isoformat())
             model = {'revision': 0, 'away': False, 'entity_settings': settings, 'schedules': [section]}
-            events = compile_events(model, 'UTC', NOW, NOW.replace(hour=18))
+            events = compile_events(model, timezone.utc, NOW, NOW.replace(hour=18))
             self.assertEqual([e.endpoint for e in events], endpoints)
 
     async def test_local_deadline_uses_ha_timezone_and_invalid_save_is_atomic(self):
         self.hass.config.time_zone = 'Europe/London'
+        await self.manager._refresh_environment()
         section, settings = fixture()
         band = section['sub_schedules'][0]['bands'][0]
         band.update(enabled=False, disabled_until='2026-07-06T14:00')
@@ -111,7 +112,7 @@ class BandTests(unittest.IsolatedAsyncioTestCase):
     async def test_legacy_validation_and_solar_suppression(self):
         section, settings = fixture()
         model = {'revision': 0, 'away': False, 'entity_settings': settings, 'schedules': [section]}
-        self.assertTrue(section_active(section, 'UTC', NOW.replace(hour=13)))
+        self.assertTrue(section_active(section, timezone.utc, NOW.replace(hour=13)))
         validate(model, {'climate.kitchen': CAP})
         band = section['sub_schedules'][0]['bands'][0]
         for value in (0, 1, None, 'false'):
@@ -126,7 +127,7 @@ class BandTests(unittest.IsolatedAsyncioTestCase):
             validate(model, {'climate.kitchen': CAP})
         band.pop('disabled_until')
         band['start_dynamic'] = {'event': 'sunrise', 'offset': 0}
-        self.assertEqual(compile_events(model, 'UTC', NOW-timedelta(days=1), NOW.replace(hour=18), lambda day, event: 720), [])
+        self.assertEqual(compile_events(model, timezone.utc, NOW-timedelta(days=1), NOW.replace(hour=18), lambda day, event: 720), [])
 
     async def test_nonclimate_suspension_and_schedule_disable_remain_independent(self):
         calls = []
@@ -362,16 +363,16 @@ class BandTests(unittest.IsolatedAsyncioTestCase):
         band = section['sub_schedules'][0]['bands'][0]
         band.update(enabled=False, disabled_until='2026-07-06T13:00Z', start_dynamic={'event': 'sunrise', 'offset': 0})
         model = {'revision': 0, 'away': False, 'entity_settings': settings, 'schedules': [section]}
-        events = compile_events(model, 'UTC', NOW, NOW.replace(hour=18), lambda day, event: 720)
+        events = compile_events(model, timezone.utc, NOW, NOW.replace(hour=18), lambda day, event: 720)
         self.assertEqual([(e.instant.hour, e.endpoint) for e in events], [(13, 'start'), (16, 'end')])
         self.assertIn(':resume:', events[0].occurrence)
-        events = compile_events(model, 'UTC', NOW, NOW.replace(hour=18), lambda day, event: 1020)
+        events = compile_events(model, timezone.utc, NOW, NOW.replace(hour=18), lambda day, event: 1020)
         self.assertFalse(any(e.endpoint == 'start' for e in events))
         band.pop('start_dynamic')
         band.update(start_minute=60, end_minute=120, disabled_until='2026-10-25T01:30Z')
         section['sub_schedules'][0]['days'] = [6]
         after = datetime(2026, 10, 25, 0, 15, tzinfo=timezone.utc)
-        events = compile_events(model, 'Europe/London', after, after.replace(hour=3))
+        events = compile_events(model, test_backend.LONDON, after, after.replace(hour=3))
         self.assertEqual([(e.instant.hour, e.instant.minute, e.endpoint) for e in events], [(1, 30, 'start'), (2, 0, 'end')])
 
     async def test_save_enabling_active_band_uses_new_settings_and_runs_once(self):

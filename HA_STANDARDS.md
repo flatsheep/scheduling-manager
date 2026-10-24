@@ -1,13 +1,8 @@
-# Home Assistant standards alignment · 1.7.0
+# Home Assistant standards alignment
 
-Release 1.9.0 adds persistent timed Away with compact targeted verification only
-at the user's request. Full-suite coverage figures below are historical; the
-coverage checklist item is pending remeasurement for the new feature.
-
-The current 1.8.0 release retains this alignment and adds a typed read-only
-presentation module for authorized Area/Floor metadata plus UTC-resolved activity.
-Its **100 backend / 20 unit / 58 browser tests** pass, with **96.80%** combined
-coverage, 15 mypy-checked modules and seven formatter-checked lifecycle/API modules.
+Current checks target HA 2026.7.0, 2026.8.1, 2026.9.4 and 2026.10.1.
+The figures further below describe historical verification, not current release
+results. The backend CI matrix enforces a 95.1% combined line/branch coverage gate.
 
 This remains a **custom integration**, not an officially awarded quality tier
 or Core-approved integration. The engineering checklist is
@@ -19,6 +14,14 @@ or Core-approved integration. The engineering checklist is
   Runtime lives in `entry.runtime_data`, not `hass.data[DOMAIN]`. Unload releases
   it; failed/cancelled setup cleans up timers and listeners. APIs resolve only
   initialized, live runtimes.
+- **Async-safe calendar dependencies:** resolve HA's configured timezone with
+  `dt_util.async_get_time_zone`, pass the resolved object through calendar/solar/
+  deadline helpers, and refresh it at timezone cutover. Preload Astral with HA's
+  async import helper before synchronous solar calculations. A fresh-process I/O
+  audit covers cold caches independently of unittest's blocking-detector exclusions.
+- **Command failures:** empty exception messages, including service timeouts, are
+  failures rather than successful acknowledgements. Failed one-off Stops retain
+  their durable pending journal until recovery or an explicitly newer command.
 - **Global API registration:** WebSocket handlers register once in `async_setup`.
   Subscriptions survive entry reload without retaining the previous manager.
   Unloaded reads and mutations return `not_loaded` consistently.
@@ -42,12 +45,14 @@ or Core-approved integration. The engineering checklist is
 - **Checks:** reproducible dev container, Ruff correctness lint, formatter checks
   for modern lifecycle/API modules, gradual mypy checks for all integration modules,
   measured line/branch coverage with a 95.1% combined gate and mock regression suites.
-- **CI:** `.github/workflows/ci.yml` defines offline HA 2026.7.0/2026.8.1/2026.9.4
+- **CI:** `.github/workflows/ci.yml` defines offline HA 2026.7.0/2026.8.1/2026.9.4/2026.10.1
   checks, pinned official hassfest and frontend build/unit/mock-browser checks.
   Remote CI results must be checked separately in the repository's Actions tab.
 
-The integration domain, API namespace, resource aliases, private storage,
-Away ID and saved scheduling behaviour are preserved.
+The 2.0 migration uses the `scheduling_manager` domain, API namespace and Store.
+Logical schedule/sub-schedule devices and the manager's Away device are created
+through supported HA registry APIs; schedule membership still references existing
+target entities.
 
 Verified release results: **96 backend tests** on HA 2026.7.0/2026.8.1/2026.9.4;
 **96.74% combined line/branch coverage**, every module above 95% combined;

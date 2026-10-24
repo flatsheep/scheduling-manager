@@ -46,6 +46,15 @@ coverage, Ruff, selected formatting, mypy, hassfest, HACS and frontend regressio
 `tools/benchmark_scheduler.py` measures isolated scheduler overhead without
 physical devices.
 
+`tools/check_async_safety.py` runs in a fresh process as part of the backend
+suite. It audits native file-open/directory events during cold timezone and
+Astral loading, Save, public/activity reads, local deadlines and timezone changes;
+timezone and solar module files must be loaded off the event loop. It also rejects
+integration warnings/errors and HA blocking-call reports for those operations.
+Fixture setup/cleanup and HA's source-context linecache inspection are excluded.
+Service-failure regressions separately cover empty exception messages and timed-out
+one-off Stops remaining pending across restart until recovery.
+
 ## Packaging
 
 ```bash

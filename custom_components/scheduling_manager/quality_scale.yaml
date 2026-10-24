@@ -43,27 +43,21 @@ rules:
     comment: Uses HA's authenticated session; no separate account or credentials exist.
   test-coverage:
     status: todo
-    comment: Last full coverage was 96.80% for 1.8.0. Timed Away has focused checks only at the user's request; rerun coverage before claiming this rule for 1.9.0.
+    comment: Latest isolated HA 2026.8.1 result is 96.29% combined line/branch coverage, above the 95.1% CI gate. This checklist does not claim an official quality tier.
   diagnostics: done
   entity-translations: done
   exception-translations: done
   icon-translations: done
   repair-issues: done
-  devices:
-    status: exempt
-    comment: A local helper controlling existing entities; it does not create physical devices.
+  devices: done
   discovery:
     status: exempt
     comment: No external device or service is discovered by this helper.
   discovery-update-info:
     status: exempt
     comment: No external network endpoint is stored.
-  dynamic-devices:
-    status: exempt
-    comment: Does not own a device registry collection; memberships reference existing entities.
-  stale-devices:
-    status: exempt
-    comment: No device registry entries are created.
+  dynamic-devices: done
+  stale-devices: done
   reconfiguration-flow:
     status: exempt
     comment: The config entry has no connection parameters; validated schedules use the card and enabled/disabled flags also have programmatic controls.

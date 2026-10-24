@@ -430,6 +430,27 @@ class OneOffTests(unittest.IsolatedAsyncioTestCase):
         await self.restart()
         self.assertEqual([c['temperature'] for c in self.calls], [21, 13, 19])
 
+    async def test_timeout_stop_remains_pending_across_restart_without_repeating_start(self):
+        _, settings = await self.create()
+        await self.at(12)
+        async def timeout(call):
+            raise TimeoutError()
+        self.hass.services.async_register('climate', 'set_temperature', timeout)
+        await self.at(16)
+        key = next(iter(settings))
+        self.assertTrue(self.band()['one_off_run']['end_recorded'])
+        self.assertEqual(self.manager.snapshot['runtime']['pending'][key]['endpoint'], 'end')
+        self.assertEqual(self.manager.snapshot['runtime']['errors'][key]['message'], 'TimeoutError')
+        await self.restart()
+        self.assertTrue(self.band()['one_off_run']['end_recorded'])
+        self.assertEqual([c['temperature'] for c in self.calls], [21])
+        async def recover(call):
+            self.calls.append(deepcopy(call.data))
+        self.hass.services.async_register('climate', 'set_temperature', recover)
+        await self.hass.async_block_till_done()
+        self.assert_removed()
+        self.assertEqual([c['temperature'] for c in self.calls], [21, 13])
+
     async def test_midnight_end_and_overnight_rejected(self):
         await self.create(start=1380, end=1440)
         await self.at(23)
@@ -459,7 +480,7 @@ class OneOffTests(unittest.IsolatedAsyncioTestCase):
         band = section['sub_schedules'][0]['bands'][0]
         band.update(one_off=True, one_off_after='2026-03-28T00:00:00+00:00')
         model.update(schedules=[section], entity_settings=settings)
-        events = compile_events(model, 'Europe/London', datetime(2026, 3, 28, tzinfo=timezone.utc), datetime(2026, 3, 30, tzinfo=timezone.utc))
+        events = compile_events(model, test_backend.LONDON, datetime(2026, 3, 28, tzinfo=timezone.utc), datetime(2026, 3, 30, tzinfo=timezone.utc))
         self.assertEqual(events, [])
         validate(model, {'climate.kitchen': test_backend.CAP})
 
@@ -475,6 +496,7 @@ class OneOffTests(unittest.IsolatedAsyncioTestCase):
         await self.at(12, day=2)
         self.manager.solar = lambda day, event: 1000
         self.hass.config.time_zone = 'Asia/Kolkata'
+        await self.manager._refresh_environment()
         await self.at(16, day=2)
         self.assert_removed()
         self.assertEqual([c['temperature'] for c in self.calls], [21, 13])

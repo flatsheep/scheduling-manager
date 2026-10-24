@@ -48,8 +48,10 @@ integration directory; existing 1.x installations use the
 4. Download through HACS as a custom **Integration** repository. Confirm the real
    end-user card-picker installation and the documented upgrade from a manual
    install. Repository validation is not itself an end-to-end installation test.
-5. Release **v2.0.1** contains integration and card **2.0.1**, with activity sensors
-   grouped on schedule devices and Away on a manager device. **v2.0.0** introduced
+5. Release **v2.0.2** contains integration and card **2.0.2**, async-safe timezone
+   and solar loading, durable timeout failures, dashboard restart recovery and
+   the touch-popup fix. **v2.0.1** grouped activity sensors on schedule devices
+   and Away on a manager device. **v2.0.0** introduced
    the canonical domain, resumable 1.x migration and inherited disabled-band styling.
    **v1.12.0** introduced one-off bands and sub-schedule controls. Native
    schedule/band Disabled switches and boolean path actions arrived in **v1.11.0**. Individual band

@@ -3,8 +3,7 @@ import asyncio
 from collections import deque
 from collections.abc import Callable
 from copy import deepcopy
-from datetime import date, timedelta
-from zoneinfo import ZoneInfo
+from datetime import date, timedelta, tzinfo
 import logging
 from typing import Any
 
@@ -12,6 +11,7 @@ from homeassistant.core import Context, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_point_in_utc_time
+from homeassistant.helpers.importlib import async_import_module
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
@@ -88,7 +88,10 @@ class Manager:
         self.generation = 0
         self.storage_error: str | None = None
         self.command_contexts: deque[str] = deque(maxlen=512)
-        self.solar: Callable[[date, str], int | None] = SolarTimes(hass)
+        self.zone: tzinfo = dt_util.UTC
+        self._zone_name: str | None = None
+        self._solar = SolarTimes(hass, self.zone)
+        self.solar: Callable[[date, str], int | None] = self._solar
         self.entity_keys: dict[str, set[str]] = {}
         self.entity_domains: set[str] = set()
         self._index_signature: tuple[tuple[str, str], ...] | None = None
@@ -100,6 +103,9 @@ class Manager:
         return self.snapshot["model"]
 
     async def start(self) -> None:
+        # HA's solar helper imports Astral lazily. Load it in HA's import executor
+        # before the first synchronous calculation on the event loop.
+        await async_import_module(self.hass, "astral.sun")
         if isinstance(self.store, Store):
             await self.hass.async_add_executor_job(inspect_store, self.store.path)
         stored = await self.store.async_load()
@@ -153,7 +159,7 @@ class Manager:
 
     def public(self) -> dict[str, Any]:
         now = dt_util.utcnow()
-        upcoming = compile_events(self.model, self.hass.config.time_zone, now, now + timedelta(days=8), self.solar) if any(one_off.bands(self.model)) else []
+        upcoming = compile_events(self.model, self.zone, now, now + timedelta(days=8), self.solar) if any(one_off.bands(self.model)) else []
         one_off_status = {}
         for _, _, band in one_off.bands(self.model):
             run = band.get("one_off_run")
@@ -161,13 +167,13 @@ class Manager:
             one_off_status[band["id"]] = {"status": ("Stop pending" if run.get("end_recorded") else "Running") if run else "Waiting",
                                          "start": run["start"] if run else event.one_off["start"] if event else None,
                                          "end": run["end"] if run else event.one_off["end"] if event else None}
-        today = now.astimezone(ZoneInfo(self.hass.config.time_zone)).date()
+        today = now.astimezone(self.zone).date()
         solar_times = {str(day): {event: self.solar(day, event) for event in SOLAR_EVENTS}
                        for day in (today + timedelta(days=i) for i in range(8))}
-        return {"model": deepcopy(self.model), "timezone": self.hass.config.time_zone, "one_off_status": one_off_status,
+        return {"model": deepcopy(self.model), "timezone": self.snapshot["runtime"]["zone"], "one_off_status": one_off_status,
                  "solar_times": solar_times,
                 "active_schedules": {section["id"]: not away_for(self.model, section) and
-                                     section_active(section, self.hass.config.time_zone, now, self.solar)
+                                      section_active(section, self.zone, now, self.solar)
                                      for section in self.model["schedules"]},
                  "status": deepcopy(self.snapshot["runtime"]["errors"]),
                  "applying": any(key not in self.snapshot["runtime"]["errors"] for key in self.snapshot["runtime"]["pending"]),
@@ -177,7 +183,7 @@ class Manager:
         """Return effective activity and the next scheduled endpoint per section."""
         now = dt_util.utcnow()
         events = compile_events(
-            self.model, self.hass.config.time_zone, now, now + timedelta(days=8), self.solar
+            self.model, self.zone, now, now + timedelta(days=8), self.solar
         )
         next_events: dict[str, Any] = {}
         for event in events:
@@ -185,7 +191,7 @@ class Manager:
         return {
             section["id"]: {
                 "active": not away_for(self.model, section)
-                and section_active(section, self.hass.config.time_zone, now, self.solar),
+                and section_active(section, self.zone, now, self.solar),
                 "next_transition": (
                     {"at": event.instant.isoformat(), "endpoint": event.endpoint}
                     if (event := next_events.get(section["id"]))
@@ -212,7 +218,7 @@ class Manager:
         try:
             await self.store.async_save(candidate)
         except Exception as err:
-            self.storage_error = str(err)
+            self.storage_error = str(err) or type(err).__name__
             self._notify()
             raise
         self.snapshot = candidate
@@ -239,8 +245,8 @@ class Manager:
             return
         now = dt_util.utcnow()
         cursor = dt_util.parse_datetime(self.snapshot["runtime"]["cursor"])
-        overdue = compile_events(self.model, self.hass.config.time_zone, cursor, now, self.solar) if cursor < now else []
-        events = compile_events(self.model, self.hass.config.time_zone, max(now, cursor), max(now, cursor) + timedelta(days=8), self.solar)
+        overdue = compile_events(self.model, self.zone, cursor, now, self.solar) if cursor < now else []
+        events = compile_events(self.model, self.zone, max(now, cursor), max(now, cursor) + timedelta(days=8), self.solar)
         # Refresh the published daily solar table at least daily, even when the
         # next device transition is several days away.
         when = min(events[0].instant, now + timedelta(days=1)) if events else now + timedelta(days=1)
@@ -339,7 +345,7 @@ class Manager:
         cursor = dt_util.parse_datetime(runtime["cursor"])
         if now <= cursor:
             return
-        events = compile_events(candidate["model"], runtime["zone"], cursor, now, self.solar)
+        events = compile_events(candidate["model"], self.zone, cursor, now, self.solar)
         events = [event for event in events if event.band_id not in skip_one_off_ids]
         # Ordinary same-instant batches retain each command, except DST collapse.
         # Late timers/downtime coalesce to each entity's final desired command.
@@ -404,12 +410,12 @@ class Manager:
                     await self.hass.services.async_call(cap.get("service_domain", eid.split(".", 1)[0]), service,
                         {"entity_id": eid, **data}, blocking=True, context=context)
         except Exception as err:
-            error = str(err)
+            error = str(err) or type(err).__name__
         candidate = deepcopy(self.snapshot)
         candidate["capabilities"] = cache_valid(self.capabilities({eid}), candidate["capabilities"])
         runtime = candidate["runtime"]
         pending = runtime["pending"].get(key)
-        if error:
+        if error is not None:
             runtime["errors"][key] = {"entity_id": eid, "message": error, "sequence": command["sequence"]}
             if pending and pending["sequence"] == command["sequence"]:
                 pending["attempt_context"] = context.id
@@ -510,16 +516,16 @@ class Manager:
                         old_deadline = {**old_subs, **old_bands}.get(band.get("id"), {}).get("disabled_until")
                         if band["disabled_until"] != old_deadline:
                             try:
-                                deadline = away_time(band["disabled_until"], self.hass.config.time_zone)
+                                deadline = away_time(band["disabled_until"], self.zone)
                                 # Equivalent ISO spellings are still the same saved
                                 # deadline, including after expiry on metadata edits.
                                 if old_deadline is None or deadline != away_time(old_deadline):
-                                    deadline = away_time(band["disabled_until"], self.hass.config.time_zone, dt_util.utcnow())
+                                    deadline = away_time(band["disabled_until"], self.zone, dt_util.utcnow())
                                 band["disabled_until"] = deadline.isoformat()
                             except Invalid as err:
                                 raise Invalid("band.disabled_until", str(err)) from None
                 require(isinstance(section.get("entities"), list) and all(isinstance(m, dict) and isinstance(m.get("entity_key"), str) for m in section["entities"]), "section.entities", "Invalid memberships")
-                one_off.prepare(self.model, section, dt_util.utcnow(), ZoneInfo(self.hass.config.time_zone), self.solar, wall_instant)
+                one_off.prepare(self.model, section, dt_util.utcnow(), self.zone, self.solar, wall_instant)
                 if index is not None:
                     prior = {m["entity_key"]: m for m in model["schedules"][index]["entities"]}
                     for member in section["entities"]:
@@ -567,7 +573,7 @@ class Manager:
                                             not old_bands[band["id"]].get("enabled", True)
                                             and old_bands[band["id"]].get("disabled_until")
                                             and previous_cursor < away_time(old_bands[band["id"]]["disabled_until"]) <= now))
-                                        and band_active(sub, band, self.hass.config.time_zone, now, self.solar)), None)
+                                        and band_active(sub, band, self.zone, now, self.solar)), None)
             execution_changed = operation == "delete" or index is None
             if not execution_changed:
                 old_section = self.model["schedules"][index]
@@ -578,7 +584,7 @@ class Manager:
                 # still owns any overdue resume and must not get a second one.
                 resume_band = None
             model["revision"] += 1
-            at_cutover = execution_changed and previous_cursor < now and bool(compile_events(model, self.hass.config.time_zone, now - timedelta(microseconds=1), now, self.solar))
+            at_cutover = execution_changed and previous_cursor < now and bool(compile_events(model, self.zone, now - timedelta(microseconds=1), now, self.solar))
             candidate["runtime"]["cursor"] = ((now - timedelta(microseconds=1) if at_cutover else max(now, previous_cursor)) if execution_changed else previous_cursor).isoformat()
             # Deleted/replaced source records may not control Away exit or retry.
             valid_keys = set(model["entity_settings"])
@@ -594,7 +600,7 @@ class Manager:
                 # sources must retain overdue progress in the same atomic commit.
                 through = now - timedelta(microseconds=1) if at_cutover else now
                 if through > previous_cursor:
-                    overdue = [event for event in compile_events(self.model, self.snapshot["runtime"]["zone"], previous_cursor, through, self.solar)
+                    overdue = [event for event in compile_events(self.model, self.zone, previous_cursor, through, self.solar)
                                if event.section["id"] != section_id]
                     self._record_events(candidate, overdue, value_model=self.model)
             if model["away"]:
@@ -614,7 +620,7 @@ class Manager:
                 # settings. An exact-boundary scheduled start handles itself.
                 scheduled_start = at_cutover and any(
                     event.section["id"] == section_id and event.endpoint == "start"
-                    for event in compile_events(model, self.hass.config.time_zone, now - timedelta(microseconds=1), now, self.solar)
+                    for event in compile_events(model, self.zone, now - timedelta(microseconds=1), now, self.solar)
                 )
                 if not scheduled_start:
                     for member in model["schedules"][index]["entities"]:
@@ -627,7 +633,7 @@ class Manager:
             # A retimed Stop may now lie behind the already-advanced cursor.
             # Journal it in this Save, without rewinding unrelated schedules.
             if cancelled_one_off:
-                retimed_due = [event for event in compile_events(model, self.hass.config.time_zone, now, now, self.solar)
+                retimed_due = [event for event in compile_events(model, self.zone, now, now, self.solar)
                                if event.band_id in cancelled_one_off]
                 self._record_events(candidate, retimed_due)
             await self._persist(candidate)
@@ -706,7 +712,7 @@ class Manager:
             band.pop("disabled_until", None)
             candidate["model"]["revision"] += 1
             if (was_disabled and section.get("enabled", True) and not away_for(candidate["model"], section)
-                    and band_active(sub, band, self.hass.config.time_zone, now, self.solar)):
+                    and band_active(sub, band, self.zone, now, self.solar)):
                 for member in section["entities"]:
                     key = member["entity_key"]
                     value = member_value(candidate["model"], member, "start")
@@ -748,7 +754,7 @@ class Manager:
             self._cancel_source_pending(candidate, section_id)
             for field in ("normal", "pre_away", "away_logical"):
                 runtime[field] = {k: v for k, v in runtime[field].items() if v.get("source") != section_id}
-            active = section_active(section, self.hass.config.time_zone, dt_util.utcnow(), self.solar, recurring_only=True)
+            active = section_active(section, self.zone, dt_util.utcnow(), self.solar, recurring_only=True)
             for member in section["entities"]:
                 key = member["entity_key"]
                 if not climate(candidate["model"], key) and (not enabled or not active):
@@ -797,7 +803,7 @@ class Manager:
         if not enabled:
             resumed = {}
             for section in candidate["model"]["schedules"]:
-                if not section.get("away_enabled", True) or not section_active(section, self.hass.config.time_zone, at, self.solar, recurring_only=True):
+                if not section.get("away_enabled", True) or not section_active(section, self.zone, at, self.solar, recurring_only=True):
                     continue
                 for member in section["entities"]:
                     key = member["entity_key"]
@@ -820,13 +826,13 @@ class Manager:
         runtime = candidate["runtime"]
         cursor = dt_util.parse_datetime(runtime["cursor"])
         if expiry > cursor:
-            events = compile_events(candidate["model"], runtime["zone"], cursor, expiry, self.solar)
+            events = compile_events(candidate["model"], self.zone, cursor, expiry, self.solar)
             self._record_events(candidate, events)
             runtime["cursor"] = expiry.isoformat()
         self._apply_away(candidate, False, expiry)
         cursor = dt_util.parse_datetime(runtime["cursor"])
         if now > cursor:
-            events = compile_events(candidate["model"], runtime["zone"], cursor, now, self.solar)
+            events = compile_events(candidate["model"], self.zone, cursor, now, self.solar)
             self._record_events(candidate, events)
             runtime["cursor"] = now.isoformat()
         for key, command in runtime["pending"].items():
@@ -849,7 +855,7 @@ class Manager:
             require(enabled or until is UNTIL_UNSET or until is None, "away_until", "A return time requires Away to be on")
             deadline = self.model.get("away_until") if enabled and until is UNTIL_UNSET else None
             if enabled and until is not UNTIL_UNSET and until is not None:
-                deadline = away_time(until, self.hass.config.time_zone, now).isoformat()
+                deadline = away_time(until, self.zone, now).isoformat()
             if enabled == self.model["away"]:
                 if deadline == self.model.get("away_until"):
                     return self.public()
@@ -960,6 +966,15 @@ class Manager:
         async with self.lock:
             if self.closed:
                 return
+            # Resolve outside the event loop's blocking I/O path. A core config
+            # update can arrive while loading; never publish a superseded zone.
+            while True:
+                zone_name = self.hass.config.time_zone
+                zone = self.zone if zone_name == self._zone_name else await dt_util.async_get_time_zone(zone_name)
+                require(zone is not None, "timezone", "Unknown Home Assistant timezone")
+                assert zone is not None
+                if zone_name == self.hass.config.time_zone:
+                    break
             candidate = deepcopy(self.snapshot)
             changed = False
             registry = er.async_get(self.hass)
@@ -972,16 +987,16 @@ class Manager:
                     if cached:
                         candidate["capabilities"][entry.entity_id] = {**cached, "entity_id": entry.entity_id}
                     changed = True
-            if candidate["runtime"]["zone"] != self.hass.config.time_zone:
-                candidate["runtime"]["zone"] = self.hass.config.time_zone
+            if candidate["runtime"]["zone"] != zone_name:
+                candidate["runtime"]["zone"] = zone_name
                 candidate["runtime"]["cursor"] = dt_util.utcnow().isoformat()
                 changed = True
             if changed:
                 candidate["model"]["revision"] += 1
                 await self._persist(candidate)
                 self.generation += 1
-                self._arm()
-                self._notify()
-            else:
-                self._arm()
-                self._notify()
+            self.zone = zone
+            self._zone_name = zone_name
+            self._solar.zone = zone
+            self._arm()
+            self._notify()

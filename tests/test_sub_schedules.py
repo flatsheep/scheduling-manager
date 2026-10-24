@@ -112,6 +112,7 @@ class SubScheduleTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_local_deadline_validation_is_atomic_and_unchanged_expiry_can_be_saved(self):
         self.hass.config.time_zone = 'Europe/London'
+        await self.manager._refresh_environment()
         section, settings = fixture()
         sub = section['sub_schedules'][0]
         sub.update(enabled=False, disabled_until='2026-07-06T14:00')
@@ -215,7 +216,7 @@ class SubEventTests(unittest.TestCase):
             section, settings = fixture()
             section['sub_schedules'][0].update(enabled=False, disabled_until=NOW.replace(hour=hour).isoformat())
             model = {'revision': 1, 'away': False, 'entity_settings': settings, 'schedules': [section]}
-            events = compile_events(model, 'UTC', NOW, NOW.replace(hour=18))
+            events = compile_events(model, timezone.utc, NOW, NOW.replace(hour=18))
             self.assertEqual([e.endpoint for e in events], endpoints)
 
     def test_overlapping_solar_bands_resume_sub_schedule_once(self):
@@ -228,12 +229,12 @@ class SubEventTests(unittest.TestCase):
         second = {**deepcopy(first), 'id': uid(), 'start_minute': 1020}
         sub['bands'].append(second)
         model = {'revision': 1, 'away': False, 'entity_settings': settings, 'schedules': [section]}
-        events = compile_events(model, 'UTC', NOW, NOW.replace(hour=14), lambda day, event: 720)
+        events = compile_events(model, timezone.utc, NOW, NOW.replace(hour=14), lambda day, event: 720)
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0].endpoint, 'start')
         # A real Start at the same instant takes precedence over synthetic resume.
         second['start_dynamic']['offset'] = 60
-        events = compile_events(model, 'UTC', NOW, NOW.replace(hour=14), lambda day, event: 720)
+        events = compile_events(model, timezone.utc, NOW, NOW.replace(hour=14), lambda day, event: 720)
         self.assertEqual(len(events), 1)
         self.assertIn(':start:', events[0].occurrence)
 
@@ -246,7 +247,7 @@ class SubEventTests(unittest.TestCase):
                 sub.update(enabled=False, disabled_until='2026-07-06T13:00Z')
                 sub['bands'][0].update(enabled=False, disabled_until=child_deadline)
                 model = {'revision': 1, 'away': False, 'entity_settings': settings, 'schedules': [section]}
-                events = compile_events(model, 'UTC', NOW, NOW.replace(hour=17))
+                events = compile_events(model, timezone.utc, NOW, NOW.replace(hour=17))
                 self.assertEqual([e.endpoint for e in events], ['start', 'end'] if parent and child_deadline else [])
                 if events:
                     self.assertEqual(events[0].instant.hour, 14 if child_deadline.endswith('14:00Z') else 13)
@@ -262,17 +263,17 @@ class SubEventTests(unittest.TestCase):
             sub.update(enabled=False, disabled_until=deadline)
             sub['bands'][0].update(start_minute=0, end_minute=1440)
             model = {'revision': 1, 'away': False, 'entity_settings': settings, 'schedules': [section]}
-            events = compile_events(model, 'Europe/London', start, start + timedelta(days=1, hours=2))
+            events = compile_events(model, test_backend.LONDON, start, start + timedelta(days=1, hours=2))
             self.assertEqual([e.endpoint for e in events], ['start', 'end'])
             self.assertEqual(events[0].instant, datetime.fromisoformat(deadline))
-            self.assertTrue(section_active(section, 'Europe/London', events[0].instant))
-            self.assertFalse(section_active(section, 'Europe/London', events[-1].instant))
+            self.assertTrue(section_active(section, test_backend.LONDON, events[0].instant))
+            self.assertFalse(section_active(section, test_backend.LONDON, events[-1].instant))
         section, settings = fixture()
         sub = section['sub_schedules'][0]
         sub.update(enabled=False, disabled_until='2026-07-06T13:00Z')
         sub['bands'][0]['start_dynamic'] = {'event': 'sunrise', 'offset': 0}
         model = {'revision': 1, 'away': False, 'entity_settings': settings, 'schedules': [section]}
-        self.assertEqual(compile_events(model, 'UTC', NOW, NOW.replace(hour=17), lambda day, event: None), [])
+        self.assertEqual(compile_events(model, timezone.utc, NOW, NOW.replace(hour=17), lambda day, event: None), [])
 
     def test_legacy_default_and_invalid_state(self):
         section, settings = fixture()

@@ -1,6 +1,5 @@
 """Daily solar endpoints from HA's configured location; no entity-state guesses."""
 from datetime import timedelta
-from zoneinfo import ZoneInfo
 
 from homeassistant.helpers.sun import get_astral_event_date
 
@@ -28,27 +27,27 @@ def resolve_band(band, day, solar=None):
 
 class SolarTimes:
     """Cache daily calculations, invalidated by location/timezone changes."""
-    def __init__(self, hass):
+    def __init__(self, hass, zone):
         self.hass = hass
+        self.zone = zone
         self.signature = None
         self.cache = {}
 
     def __call__(self, day, event):
         config = self.hass.config
-        signature = (config.latitude, config.longitude, config.elevation, config.time_zone)
+        signature = (config.latitude, config.longitude, config.elevation, self.zone)
         if signature != self.signature:
             self.signature = signature
             self.cache.clear()
         key = (day, event)
         if key not in self.cache:
-            zone = ZoneInfo(config.time_zone)
             minute = None
             # Astral dates are UTC calendar dates. Find the event in this HA local
             # calendar day, including solar midnight and far-east/west locations.
             for delta in (0, -1, 1):
                 instant = get_astral_event_date(self.hass, event, day + timedelta(days=delta))
                 if instant is not None:
-                    local = instant.astimezone(zone)
+                    local = instant.astimezone(self.zone)
                     if local.date() == day:
                         minute = local.hour * 60 + local.minute
                         break

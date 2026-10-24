@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 import unittest
 from unittest.mock import patch
 
+from homeassistant.util import dt as dt_util
+
 import test_backend
 from test_backend import fixture, NOW, uid
 from custom_components.scheduling_manager.switch import AwaySwitch
@@ -122,14 +124,15 @@ class TimedAwayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(message['until'], '2026-07-06T12:00')
         for value in (False, 123, 'invalid', '2026-02-30T12:00', '2026-07-06T09:00Z'):
             with self.assertRaises(Invalid):
-                away_time(value, 'UTC', NOW)
+                away_time(value, timezone.utc, NOW)
         with self.assertRaises(Invalid):
             away_time('2026-07-06T12:00')
         with self.assertRaises(Invalid):
-            away_time('2026-03-29T01:30', 'Europe/London')
-        folded = away_time('2026-10-25T01:30', 'Europe/London', datetime(2026, 10, 25, 0, 50, tzinfo=timezone.utc))
+            away_time('2026-03-29T01:30', test_backend.LONDON)
+        folded = away_time('2026-10-25T01:30', test_backend.LONDON, datetime(2026, 10, 25, 0, 50, tzinfo=timezone.utc))
         self.assertEqual(folded, datetime(2026, 10, 25, 1, 30, tzinfo=timezone.utc))
-        self.assertEqual(away_time('2026-07-06T21:00', 'Asia/Tokyo', NOW), NOW.replace(hour=12))
+        tokyo = await dt_util.async_get_time_zone('Asia/Tokyo')
+        self.assertEqual(away_time('2026-07-06T21:00', tokyo, NOW), NOW.replace(hour=12))
         await self.manager.set_away(True, until='2026-07-06T11:00')
         model = deepcopy(self.manager.model)
         model['away'] = False

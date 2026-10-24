@@ -1,5 +1,40 @@
 # Verification results
 
+## Release 2.0.2: async timezone loading and durable timeout failures (2026-10-24)
+
+- Addressed the review finding by resolving HA's configured timezone with
+  `await dt_util.async_get_time_zone(...)`, retaining the object and passing it
+  through scheduling, one-off, activity, solar and local-deadline helpers. No
+  integration module constructs `ZoneInfo` directly. Timezone cutover retains
+  serialized persistence; superseded resolutions and failed writes cannot replace
+  the active resolved timezone with inconsistent state.
+- Astral is loaded through HA's async import helper before first-use solar work.
+  A fresh-process audit checks actual native file-open/directory events, including
+  cold timezone files and Astral modules. Startup, Save, reads, local deadlines and
+  timezone changes produced no integration loop I/O, integration warnings/errors
+  or HA blocking-call reports in this audit on all four supported HA versions.
+- Empty exception messages now remain failures with fallback text. A timed-out
+  one-off Stop stays pending across restart and completes on service recovery
+  without repeating Start. Empty-message storage failures remain visible too.
+- **237 backend tests across 13 suites passed** in isolated network-disabled
+  containers on HA **2026.7.0**, **2026.8.1**, **2026.9.4** and **2026.10.1**.
+  Combined line/branch coverage on HA 2026.8.1 is **96.29%**, above the unchanged
+  **95.1%** gate. The subprocess-only cold-cache test runs outside the parent
+  coverage wrapper, avoiding misleading no-data warnings.
+- Ruff, all ten selected formatting checks, mypy across all 22 integration modules
+  and pinned official hassfest passed (one integration, zero invalid integrations).
+  Updated stale standards/device-checklist documentation and the benchmark's
+  timezone inputs.
+- Integration/card versions are aligned at **2.0.2**. The release also includes
+  the dashboard reconnect/startup recovery and touch-popup fixes already on main.
+  Both the registered outer-loader URL and its inner import use the new version
+  so clients can pick up the release without retaining the old loader URL.
+- The 2.0.2 production frontend build, **26 unit tests**, all **88 Chromium tests**
+  and the isolated HACS-only installation/served-card check passed. Ruff, selected
+  formatting, mypy and pinned hassfest were rechecked after the version bump.
+- Publication and renewed review were subsequently authorised. No production
+  installation or HA restart is part of this release preparation.
+
 ## Release 2.0.1: native activity/Away device visibility
 
 - Read-only inspection found eight enabled activity sensors and the enabled Away

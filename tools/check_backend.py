@@ -38,7 +38,9 @@ def main() -> None:
                 del loaded
             for selection in selections:
                 command = [sys.executable]
-                if args.coverage:
+                # The cold-cache test launches its own fresh interpreter; its
+                # parent imports no integration code and has no coverage data.
+                if args.coverage and suite.name != "test_async_safety.py":
                     command += ["-m", "coverage", "run", "--parallel-mode"]
                 command += ["tools/run_suite.py", *selection]
                 subprocess.run(command, cwd=ROOT, env=env, check=True)

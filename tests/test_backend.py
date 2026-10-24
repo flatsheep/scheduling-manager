@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import device_registry as dr
 from homeassistant.const import __version__
+from homeassistant.util import dt as dt_util
 
 from custom_components.scheduling_manager.events import compile_events, wall_instant, section_active
 from custom_components.scheduling_manager.scheduler import Manager
@@ -18,6 +19,7 @@ from custom_components.scheduling_manager.validation import Invalid, validate, t
 from custom_components.scheduling_manager.websocket_api import visible, mutation
 
 UTC = timezone.utc
+LONDON = ZoneInfo('Europe/London')
 NOW = datetime(2026, 7, 6, 10, tzinfo=UTC)  # Monday
 
 
@@ -118,7 +120,7 @@ class EventTests(unittest.TestCase):
         section, settings=fixture(start=0,end=60,days=[0,1]); sub=section['sub_schedules'][0]
         sub['bands'].append({'id':uid(),'start_minute':60,'end_minute':1440})
         model={'revision':0,'schedules':[section],'entity_settings':settings,'away':False}
-        events=compile_events(model,'UTC',NOW.replace(hour=0)-timedelta(seconds=1),NOW+timedelta(days=1))
+        events=compile_events(model,UTC,NOW.replace(hour=0)-timedelta(seconds=1),NOW+timedelta(days=1))
         at_hour=[e.endpoint for e in events if e.instant==NOW.replace(hour=1)]
         self.assertEqual(at_hour,['end','start'])
         at_midnight=[e.endpoint for e in events if e.instant==NOW.replace(hour=0)+timedelta(days=1)]
@@ -128,25 +130,25 @@ class EventTests(unittest.TestCase):
 
     def test_gap_preserves_logical_order_and_long_downtime_bounded(self):
         section,settings=fixture(start=70,end=100,days=[6]);model={'revision':0,'schedules':[section]}
-        events=compile_events(model,'Europe/London',datetime(2026,3,28,tzinfo=UTC),datetime(2026,3,30,tzinfo=UTC))
+        events=compile_events(model,LONDON,datetime(2026,3,28,tzinfo=UTC),datetime(2026,3,30,tzinfo=UTC))
         self.assertEqual([e.endpoint for e in events],['start','end'])
         self.assertEqual(events[0].instant,events[1].instant)
-        recent=compile_events(model,'UTC',datetime(2000,1,1,tzinfo=UTC),NOW)
+        recent=compile_events(model,UTC,datetime(2000,1,1,tzinfo=UTC),NOW)
         self.assertLessEqual(len(recent),4)
 
     def test_disabled_compilation_and_active_band_dst_boundaries(self):
         section,settings=fixture(start=720,end=960)
-        self.assertFalse(section_active(section,'UTC',NOW))
-        self.assertTrue(section_active(section,'UTC',NOW.replace(hour=12)))
-        self.assertFalse(section_active(section,'UTC',NOW.replace(hour=16)))
+        self.assertFalse(section_active(section,UTC,NOW))
+        self.assertTrue(section_active(section,UTC,NOW.replace(hour=12)))
+        self.assertFalse(section_active(section,UTC,NOW.replace(hour=16)))
         section['enabled']=False
-        self.assertFalse(section_active(section,'UTC',NOW.replace(hour=13)))
-        self.assertEqual(compile_events({'revision':0,'schedules':[section]},'UTC',NOW,NOW.replace(hour=17)),[])
+        self.assertFalse(section_active(section,UTC,NOW.replace(hour=13)))
+        self.assertEqual(compile_events({'revision':0,'schedules':[section]},UTC,NOW,NOW.replace(hour=17)),[])
         section,settings=fixture(start=70,end=100,days=[6])
-        self.assertFalse(section_active(section,'Europe/London',datetime(2026,3,29,1,tzinfo=UTC)))
+        self.assertFalse(section_active(section,LONDON,datetime(2026,3,29,1,tzinfo=UTC)))
         section['sub_schedules'][0]['bands'][0].update(start_minute=90,end_minute=105)
-        self.assertTrue(section_active(section,'Europe/London',datetime(2026,10,25,0,35,tzinfo=UTC)))
-        self.assertFalse(section_active(section,'Europe/London',datetime(2026,10,25,1,35,tzinfo=UTC)))
+        self.assertTrue(section_active(section,LONDON,datetime(2026,10,25,0,35,tzinfo=UTC)))
+        self.assertFalse(section_active(section,LONDON,datetime(2026,10,25,1,35,tzinfo=UTC)))
 
 
 class MemoryStore:
@@ -348,6 +350,60 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.hass.config.time_zone='Europe/London';self.clock=NOW.replace(hour=13)
         await self.manager._refresh_environment();self.assertEqual(self.calls,[])
         self.assertEqual(self.manager.snapshot['runtime']['zone'],'Europe/London')
+
+    async def test_empty_exception_message_keeps_failed_command_and_storage_error(self):
+        section, settings = fixture()
+        await self.save(section, settings)
+        async def fail(call):
+            raise RuntimeError()
+        self.hass.services.async_register('climate', 'set_temperature', fail)
+        await self.at(12)
+        key = next(iter(settings))
+        self.assertIn(key, self.manager.snapshot['runtime']['pending'])
+        self.assertEqual(self.manager.snapshot['runtime']['errors'][key]['message'], 'RuntimeError')
+        with patch.object(self.store, 'async_save', side_effect=OSError()):
+            with self.assertRaises(OSError):
+                await self.manager._persist(deepcopy(self.manager.snapshot))
+        self.assertEqual(self.manager.storage_error, 'OSError')
+
+    async def test_unknown_timezone_preserves_previous_environment(self):
+        before = deepcopy(self.manager.snapshot)
+        previous = self.manager.zone
+        self.hass.config.time_zone = 'Invalid/Timezone'
+        with self.assertRaisesRegex(Invalid, 'Unknown Home Assistant timezone'):
+            await self.manager._refresh_environment()
+        self.assertIs(self.manager.zone, previous)
+        self.assertEqual(self.manager.snapshot, before)
+
+    async def test_timezone_change_during_load_discards_stale_resolution(self):
+        resolve = dt_util.async_get_time_zone
+        loaded = []
+        async def change_while_loading(name):
+            loaded.append(name)
+            zone = await resolve(name)
+            if name == 'Europe/London':
+                self.hass.config.time_zone = 'Asia/Kolkata'
+            return zone
+        self.hass.config.time_zone = 'Europe/London'
+        with patch('custom_components.scheduling_manager.scheduler.dt_util.async_get_time_zone', side_effect=change_while_loading):
+            await self.manager._refresh_environment()
+        self.assertEqual(loaded, ['Europe/London', 'Asia/Kolkata'])
+        self.assertEqual(self.manager.public()['timezone'], 'Asia/Kolkata')
+        self.assertEqual(str(self.manager.zone), 'Asia/Kolkata')
+        self.assertIs(self.manager._solar.zone, self.manager.zone)
+
+    async def test_timezone_storage_failure_keeps_resolved_and_saved_state_consistent(self):
+        previous = self.manager.zone
+        self.hass.config.time_zone = 'Europe/London'
+        self.store.fail = True
+        with self.assertRaises(OSError):
+            await self.manager._refresh_environment()
+        self.assertIs(self.manager.zone, previous)
+        self.assertEqual(self.manager.public()['timezone'], 'UTC')
+        self.store.fail = False
+        await self.manager._refresh_environment()
+        self.assertEqual(self.manager.public()['timezone'], 'Europe/London')
+        self.assertEqual(str(self.manager.zone), 'Europe/London')
 
     async def test_fallback_steps_range_only_cached_and_unit_conversion(self):
         self.set_state('climate.kitchen',step=None)
@@ -702,6 +758,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         section, settings = fixture(start=70, end=105, days=[6])
         self.hass.config.time_zone = 'Europe/London'
         self.clock = datetime(2026, 10, 25, 0, 0, tzinfo=UTC)
+        await self.manager._refresh_environment()
         await self.save(section, settings)
         self.clock = datetime(2026, 10, 25, 0, 20, tzinfo=UTC)
         self.assertTrue(self.manager.public()['active_schedules'][section['id']])

@@ -1,10 +1,9 @@
 """Authoritative model and decimal-safe temperature validation."""
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from typing import Any
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from homeassistant.util.unit_conversion import TemperatureConverter
 from .actions import state_value
@@ -22,7 +21,7 @@ def require(ok, path, message):
         raise Invalid(path, message)
 
 
-def away_time(value: Any, zone_name: str | None = None, now: datetime | None = None) -> datetime:
+def away_time(value: Any, zone: tzinfo | None = None, now: datetime | None = None) -> datetime:
     """Resolve a return time to UTC; local inputs use HA's timezone, not the client."""
     require(isinstance(value, str), "away_until", "Choose a return date and time")
     try:
@@ -30,9 +29,8 @@ def away_time(value: Any, zone_name: str | None = None, now: datetime | None = N
     except (TypeError, ValueError):
         raise Invalid("away_until", "Choose a valid return date and time") from None
     if instant.tzinfo is None:
-        if zone_name is None:
+        if zone is None:
             raise Invalid("away_until", "Saved return time must include a timezone")
-        zone = ZoneInfo(zone_name)
         choices = {instant.replace(tzinfo=zone, fold=fold).astimezone(timezone.utc)
                    for fold in (0, 1)
                    if instant.replace(tzinfo=zone, fold=fold).astimezone(timezone.utc).astimezone(zone).replace(tzinfo=None) == instant}
