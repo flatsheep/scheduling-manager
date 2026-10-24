@@ -48,11 +48,11 @@ targets need updating. Read the guide before upgrading; do not delete the old en
 
 ## Install
 
-One HACS download includes the integration and its matching dashboard card.
-No separate JavaScript resource or YAML is needed.
+Scheduling Manager is included in HACS's default catalogue. One HACS download
+includes the integration and its matching dashboard card. No separate JavaScript
+resource or YAML is needed.
 
-1. In **HACS → ⋮ → Custom repositories**, add
-   `https://github.com/flatsheep/scheduling-manager` with category **Integration**.
+1. Open **HACS** and search for **Scheduling Manager**.
 2. Download **Scheduling Manager**, then **restart Home Assistant**.
 3. Open **Settings → Devices & services → Add integration**, search for
    **Scheduling Manager**, and add it.
@@ -68,8 +68,23 @@ the **dashboard view's title** as its heading; an untitled view leaves it blank.
 
 Refresh your browser or reopen the companion app if the card is not listed yet.
 Updates follow the same pattern: download in HACS, restart HA, refresh the dashboard.
-Your saved schedules are retained. This is a HACS **custom repository**, not yet a
-default-catalogue entry.
+Your saved schedules are retained.
+
+<details>
+<summary>Not appearing in HACS? Add the custom repository as a fallback</summary>
+
+New catalogue entries can take up to **8 hours** to appear in HACS. If you cannot
+find Scheduling Manager in search, you can add it manually:
+
+1. Open **HACS → ⋮ → Custom repositories**.
+2. Add `https://github.com/flatsheep/scheduling-manager` with category **Integration**.
+3. Search for **Scheduling Manager**, then follow the download, restart and setup
+   steps above.
+
+If you already installed it as a custom repository, keep your existing installation;
+there is no need to remove or re-add the integration.
+
+</details>
 
 <details>
 <summary>Manual installation, YAML cards and older installations</summary>
