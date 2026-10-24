@@ -48,9 +48,10 @@ integration directory; existing 1.x installations use the
 4. Download through HACS as a custom **Integration** repository. Confirm the real
    end-user card-picker installation and the documented upgrade from a manual
    install. Repository validation is not itself an end-to-end installation test.
-5. Release **v2.0.0** contains integration and card **2.0.0**, the canonical
-   `scheduling_manager` domain, resumable 1.x migration and inherited disabled-band
-   styling. **v1.12.0** introduced one-off bands and sub-schedule controls. Native
+5. Release **v2.0.1** contains integration and card **2.0.1**, with activity sensors
+   grouped on schedule devices and Away on a manager device. **v2.0.0** introduced
+   the canonical domain, resumable 1.x migration and inherited disabled-band styling.
+   **v1.12.0** introduced one-off bands and sub-schedule controls. Native
    schedule/band Disabled switches and boolean path actions arrived in **v1.11.0**. Individual band
    controls were introduced in **v1.10.0**. The first public release was
    **v1.9.19** (integration **1.9.4**, card **1.9.19**). The generated ZIP is a

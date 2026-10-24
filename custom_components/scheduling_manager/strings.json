@@ -14,8 +14,11 @@
   "entity": {
     "switch": {
       "away": {
-        "name": "Scheduling Manager Away"
+        "name": "Away"
       }
+    },
+    "binary_sensor": {
+      "active": {"name": "Active"}
     }
   },
   "services": {

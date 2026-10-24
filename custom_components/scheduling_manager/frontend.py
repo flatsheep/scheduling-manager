@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN
 
-CARD_VERSION = "2.0.0"
+CARD_VERSION = "2.0.1"
 CARD_PATH = f"/{DOMAIN}/scheduling-manager-card.js"
 LOADER_PATH = f"/{DOMAIN}/scheduling-manager-loader.js"
 CARD_URL = f"{LOADER_PATH}?v={CARD_VERSION}"

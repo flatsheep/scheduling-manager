@@ -190,6 +190,14 @@ class AwaySwitch(SwitchEntity):
         self.entity_id = "switch.scheduling_manager_away"
 
     @property
+    def device_info(self) -> dr.DeviceInfo:
+        return dr.DeviceInfo(
+            identifiers={(DOMAIN, "manager")},
+            name="Scheduling Manager",
+            entry_type=dr.DeviceEntryType.SERVICE,
+        )
+
+    @property
     def is_on(self) -> bool:
         return bool(self.manager.model["away"])
 

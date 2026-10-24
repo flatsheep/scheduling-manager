@@ -7,6 +7,8 @@ from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers import device_registry as dr
+from homeassistant.util import slugify
 
 from .const import DOMAIN, SIGNAL
 from .runtime import ScheduleConfigEntry
@@ -70,6 +72,8 @@ class ScheduleBinarySensor(BinarySensorEntity):
 
     _attr_should_poll = False
     _attr_icon = "mdi:calendar-clock"
+    _attr_has_entity_name = True
+    _attr_translation_key = "active"
 
     def __init__(self, manager: Manager, section_id: str, activity: dict[str, Any]) -> None:
         self.manager = manager
@@ -77,7 +81,15 @@ class ScheduleBinarySensor(BinarySensorEntity):
         self._activity = activity
         section = self._section
         self._attr_unique_id = f"{DOMAIN}_{section_id}"
-        self._attr_name = f"Schedule {section['name']}"
+        self.entity_id = "binary_sensor.schedule_" + slugify(section["name"])
+
+    @property
+    def device_info(self) -> dr.DeviceInfo:
+        return dr.DeviceInfo(
+            identifiers={(DOMAIN, "schedule_" + self.section_id)},
+            name=self._section["name"],
+            entry_type=dr.DeviceEntryType.SERVICE,
+        )
 
     @property
     def _section(self) -> dict[str, Any]:

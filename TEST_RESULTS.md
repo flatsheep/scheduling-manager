@@ -1,5 +1,24 @@
 # Verification results
 
+## Release 2.0.1: native activity/Away device visibility
+
+- Read-only inspection found eight enabled activity sensors and the enabled Away
+  switch without device associations. Schedule devices therefore showed only
+  their Disabled control.
+- Activity sensors now attach to their schedule device as **Active**, retaining
+  their existing entity IDs and unique IDs. Away attaches to a separate
+  **Scheduling Manager** service device. User entity names/icons/labels are retained.
+- Seven focused HA checks passed, covering existing-entity attachment, activity
+  state, translated Away naming, hierarchy upgrades, cleanup, domain migration and
+  HA 2026.7 compatibility. Ruff, selected formatting, mypy and hassfest passed.
+- Installed four targeted backend/translation files and performed one explicitly
+  authorised restart. HA 2026.10.1 loaded cleanly at saved revision **134**.
+  The model and all **43 entity-registry identities/customisations** were preserved.
+  All eight activity sensors now share their schedule's device with Disabled;
+  Away is on the new manager device, for **19 devices** total. Existing device
+  identities/customisations were retained, native states match scheduler state,
+  and no scheduler errors were reported. No physical-device tests were performed.
+
 ## Release 2.0.0: canonical naming and 1.x migration
 
 - Canonical integration folder, domain, actions, WebSocket namespace, Store and

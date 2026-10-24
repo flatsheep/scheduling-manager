@@ -116,6 +116,11 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             sensor = self.hass.states.get('binary_sensor.schedule_downstairs')
             self.assertIsNotNone(sensor)
             self.assertEqual(sensor.state, 'on')
+            registry = er.async_get(self.hass)
+            activity_entry = registry.async_get(sensor.entity_id)
+            disabled_id = registry.async_get_entity_id('switch', DOMAIN, f'{DOMAIN}_disabled_{section["id"]}')
+            self.assertEqual(activity_entry.device_id, registry.async_get(disabled_id).device_id)
+            self.assertEqual(sensor.attributes['friendly_name'], 'Downstairs Active')
             self.assertEqual(sensor.attributes['schedule_id'], section['id'])
             self.assertEqual(sensor.attributes['members'][0]['entity_id'], 'climate.kitchen')
             self.assertEqual(sensor.attributes['sub_schedules'][0]['days'], ['monday'])
@@ -240,7 +245,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             registry = er.async_get(self.hass)
             before = {e.unique_id: (e.entity_id, e.device_id) for e in er.async_entries_for_config_entry(registry, entry.entry_id)}
             device_ids = {d.id for d in entry_devices(devices, entry.entry_id)}
-            self.assertEqual(len(device_ids), 2)
+            self.assertEqual(len(device_ids), 3)
             sub_switch = next(s for s in self.hass.states.async_all('switch') if s.attributes.get('kind') == 'sub_schedule')
             registry.async_update_entity(sub_switch.entity_id, name='Keep this name')
             self.assertTrue(await self.hass.config_entries.async_reload(entry.entry_id))
@@ -297,7 +302,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             parent_id = registry.async_get(controls[section['id']].entity_id).device_id
             sub_id = registry.async_get(controls[sub['id']].entity_id).device_id
             self.assertEqual(migrated.device_id, sub_id)
-            self.assertEqual(len(entry_devices(devices, entry.entry_id)), 3)
+            self.assertEqual(len(entry_devices(devices, entry.entry_id)), 4)
             if hasattr(devices, 'async_get_or_create_child'):
                 self.assertEqual(devices.async_get(sub_id).parent_device_id, parent_id)
             else:
@@ -324,7 +329,48 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(devices.async_get(parent_id))
             await entry.runtime_data.save_section(3, 'delete', section['id'])
             await self.hass.async_block_till_done()
-            self.assertEqual(entry_devices(devices, entry.entry_id), [])
+            remaining = entry_devices(devices, entry.entry_id)
+            self.assertEqual(len(remaining), 1)
+            self.assertEqual(remaining[0].identifiers, {(DOMAIN, 'manager')})
+
+    async def test_unassigned_activity_and_away_entities_attach_without_identity_changes(self):
+        from test_backend import NOW, fixture
+
+        await async_setup_component(self.hass, 'climate', {})
+        with patch('custom_components.scheduling_manager.scheduler.dt_util.utcnow', return_value=NOW):
+            entry = ConfigEntry(domain=DOMAIN, title='Scheduling Manager', data={}, options={}, source=SOURCE_USER,
+                                unique_id=DOMAIN, version=1, minor_version=1, discovery_keys={}, subentries_data=[])
+            await self.hass.config_entries.async_add(entry)
+            self.hass.states.async_set('climate.kitchen', 'heat', {
+                'supported_features': 1, 'min_temp': 7, 'max_temp': 35, 'target_temp_step': .5,
+            })
+            section, settings = fixture()
+            await entry.runtime_data.save_section(0, 'upsert', section['id'], section, settings)
+            await self.hass.async_block_till_done()
+            registry = er.async_get(self.hass)
+            ids = ('binary_sensor.schedule_downstairs', 'switch.scheduling_manager_away')
+            self.assertTrue(await self.hass.config_entries.async_unload(entry.entry_id))
+            before = {}
+            for entity_id in ids:
+                registered = registry.async_update_entity(entity_id, device_id=None, name='Custom ' + entity_id,
+                                                         icon='mdi:star', labels={'keep-label'})
+                before[entity_id] = registered
+            self.assertTrue(await self.hass.config_entries.async_setup(entry.entry_id))
+            await self.hass.async_block_till_done()
+            for entity_id in ids:
+                registered = registry.async_get(entity_id)
+                self.assertEqual(registered.id, before[entity_id].id)
+                self.assertEqual(registered.unique_id, before[entity_id].unique_id)
+                self.assertEqual(registered.name, before[entity_id].name)
+                self.assertEqual(registered.icon, 'mdi:star')
+                self.assertEqual(registered.labels, {'keep-label'})
+                self.assertIsNotNone(registered.device_id)
+            parent_id = registry.async_get(registry.async_get_entity_id('switch', DOMAIN, f'{DOMAIN}_disabled_{section["id"]}')).device_id
+            self.assertEqual(registry.async_get(ids[0]).device_id, parent_id)
+            manager_device = dr.async_get(self.hass).async_get(registry.async_get(ids[1]).device_id)
+            self.assertEqual(manager_device.identifiers, {(DOMAIN, 'manager')})
+            self.assertEqual(manager_device.name, 'Scheduling Manager')
+            self.assertEqual(len(er.async_entries_for_config_entry(registry, entry.entry_id)), 5)
 
     async def test_control_writes_require_admin_but_internal_automations_are_supported(self):
         from homeassistant.exceptions import Unauthorized

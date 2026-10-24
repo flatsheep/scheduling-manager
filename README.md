@@ -32,7 +32,7 @@ Manual device adjustments stay in place until the next relevant transition.
   for participating schedules, indefinitely or until a chosen time.
 - **HA automation controls**, collapsible categories and area/floor/activity filters.
 
-**Integration and card: 2.0.0 · Home Assistant 2026.7+**
+**Integration and card: 2.0.1 · Home Assistant 2026.7+**
 Tested on HA 2026.7.0, 2026.8.1, 2026.9.4 and 2026.10.1.
 
 **Upgrading from 1.x?** Version 2.0 completes the integration's rename. Follow the
@@ -74,7 +74,7 @@ default-catalogue entry.
 <details>
 <summary>Manual installation, YAML cards and older installations</summary>
 
-1. Download [scheduling-manager-2.0.0.zip](https://github.com/flatsheep/scheduling-manager/releases/download/v2.0.0/scheduling-manager-2.0.0.zip)
+1. Download [scheduling-manager-2.0.1.zip](https://github.com/flatsheep/scheduling-manager/releases/download/v2.0.1/scheduling-manager-2.0.1.zip)
    from the release.
 2. Extract `custom_components/scheduling_manager/` into your HA
    configuration's `custom_components/` directory. Create that directory if needed.
@@ -329,6 +329,10 @@ the days opens a chooser for other sub-schedules.
 Schedules, sub-schedules and recurring bands expose native **Disabled** switches:
 **on = disabled; off = enabled**. Find their entity IDs under
 **Settings → Devices & services → Entities**.
+
+Each schedule device groups its read-only **Active** sensor with its **Disabled**
+switch. A separate **Scheduling Manager** device contains the global **Away**
+switch. These native entities work independently of the dashboard card.
 
 Schedules and their sub-schedules are grouped as parent/child devices on HA 2026.9+:
 

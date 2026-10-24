@@ -8,6 +8,12 @@ A **schedule** combines devices with common Start/Stop times. Each device has it
 own actions. A **sub-schedule** assigns one timetable to a group of weekdays:
 name groups Weekdays, Weekends or individual days as needed.
 
+Under **Settings → Devices & services → Scheduling Manager**, each schedule
+device contains an **Active** binary sensor and a **Disabled** switch. Sub-schedule
+devices group their own Disabled switch and recurring-band controls. The separate
+**Scheduling Manager** device contains **Away**. These entities are also available
+in HA's Entities list for use in dashboards, automations and scripts.
+
 - Each schedule supports 1–7 sub-schedules with disjoint, nonempty weekday sets.
 - Each group supports up to ten bands. Empty groups are valid and inactive,
   including those left after their final one-off completes.
