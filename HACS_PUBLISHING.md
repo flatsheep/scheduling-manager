@@ -45,10 +45,13 @@ integration directory; existing 1.x installations use the
    returns HTTP 200 and the first public HACS repository-validation job passed:
    https://github.com/flatsheep/scheduling-manager/actions/runs/39483958924/job/118839451544
    HACS validation runs automatically on subsequent pushes.
-4. Download through HACS as a custom **Integration** repository. Confirm the real
+4. Search for Scheduling Manager in HACS's default catalogue and download it.
+   Custom-repository setup remains a fallback. Confirm the real
    end-user card-picker installation and the documented upgrade from a manual
    install. Repository validation is not itself an end-to-end installation test.
-5. Release **v2.0.2** contains integration and card **2.0.2**, async-safe timezone
+5. Release **v2.0.3** packages the updated README: default-catalogue installation,
+   a smaller right-aligned coffee button and the HACS shortcut in Install.
+   Scheduling behaviour is unchanged from **v2.0.2**, which added async-safe timezone
    and solar loading, durable timeout failures, dashboard restart recovery and
    the touch-popup fix. **v2.0.1** grouped activity sensors on schedule devices
    and Away on a manager device. **v2.0.0** introduced
@@ -58,13 +61,15 @@ integration directory; existing 1.x installations use the
    controls were introduced in **v1.10.0**. The first public release was
    **v1.9.19** (integration **1.9.4**, card **1.9.19**). The generated ZIP is a
    manual-install fallback, not a HACS `zip_release`.
-6. Submit for the HACS default catalogue separately if desired. A public custom
-   repository does not need default-catalogue inclusion to be downloaded.
+6. The default-catalogue submission was approved and merged:
+   https://github.com/hacs/default/pull/12341. New catalogue entries can take up to
+   eight hours to propagate. HACS reads documentation from the installed release,
+   or the latest release for repositories not yet installed; pushing README changes
+   only to the default branch does not update release-specific documentation.
 
 References:
 - https://www.hacs.xyz/docs/publish/start/
 - https://www.hacs.xyz/docs/publish/integration/
 
-Public releases and HACS custom-repository installation are available. Inclusion
-in HACS's default catalogue is a separate submission. Check the repository's
-Releases and Actions pages for current status.
+Public releases and HACS default-catalogue installation are available. Check the
+repository's Releases and Actions pages for current status.

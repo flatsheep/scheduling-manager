@@ -1,5 +1,20 @@
 # Verification results
 
+## Release 2.0.3: HACS installation and README presentation
+
+- Packages the README changes already on main: search in HACS's default catalogue
+  first, custom-repository fallback instructions, a 20% smaller right-aligned
+  coffee button, and the Open in HACS shortcut below the main installation steps.
+- HACS loads the README from the installed/latest release rather than necessarily
+  from main. Publishing this patch makes those changes available in release-specific
+  documentation without changing the existing v2.0.2 tag.
+- Integration/card versions and loader cache keys are aligned at **2.0.3**.
+  Scheduler logic and the built card payload are unchanged from **2.0.2**.
+- Production frontend build and all **26 unit tests** passed. The two focused HA
+  frontend registration/payload checks and the HACS-only installation/served-card
+  check passed in an isolated HA 2026.10.1 container with networking disabled.
+  The release's full GitHub CI matrix runs before publication.
+
 ## Release 2.0.2: async timezone loading and durable timeout failures (2026-10-24)
 
 - Addressed the review finding by resolving HA's configured timezone with
