@@ -1,8 +1,6 @@
 # Scheduling Manager
 
-<a href="https://www.buymeacoffee.com/flatsheep"><img align="right" src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy me a coffee" height="40" width="145"></a>
-
-[![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=flatsheep&repository=scheduling-manager&category=integration)
+<p align="right"><a href="https://www.buymeacoffee.com/flatsheep"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy me a coffee" height="32" width="116"></a></p>
 
 **A clearer way to manage your Home Assistant schedules.**
 
@@ -61,6 +59,8 @@ resource or YAML is needed.
 5. Choose **Add card → By card**, search for **Scheduling Manager**, then select
    it as the view's single card. Save and leave dashboard editing.
 6. Choose **＋ Schedule** to begin your first routine.
+
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=flatsheep&repository=scheduling-manager&category=integration)
 
 Panel layout is recommended because it gives the timelines and device settings
 room to sit together. Other dashboard layouts are supported too. The card uses
