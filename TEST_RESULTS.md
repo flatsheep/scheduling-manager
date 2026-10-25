@@ -1,5 +1,20 @@
 # Verification results
 
+## Release 2.0.4: trimmed normal and HiDPI brand icons
+
+- Regenerated the original calendar/timeline icon without empty outer rows or
+  columns and added `brand/icon@2x.png`. Normal/HiDPI sizes are exactly 256×256 and
+  512×512, with transparent backgrounds and lossless Adam7-interlaced PNG encoding.
+- Independent Pillow verification checks PNG integrity, dimensions, transparency,
+  full-canvas alpha bounds, matching normal/HiDPI artwork and deterministic
+  generation. File sizes are 1,700 and 4,217 bytes respectively.
+- Icons are shipped through the custom integration's local `brand/` directory.
+  The release does not submit a new legacy central-brand entry or change scheduler
+  behaviour. Integration/card version and loader cache keys are **2.0.4**.
+- Local production frontend build, all **26 unit tests**, both focused HA frontend
+  registration/payload checks and generator lint passed. Full release CI covers
+  the supported four-version HA matrix, frontend, HACS and hassfest.
+
 ## Release 2.0.3: HACS installation and README presentation
 
 - Packages the README changes already on main: search in HACS's default catalogue

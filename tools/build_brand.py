@@ -1,44 +1,64 @@
-"""Generate the project's original, dependency-free 256px timetable icon."""
+"""Render trimmed, lossless, interlaced timetable icons at 256px and 512px."""
 
 from pathlib import Path
 import struct
 import zlib
 
 SIZE = 256
+ADAM7 = ((0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4),
+         (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2))
 
 
-def main() -> None:
-    pixels = bytearray(SIZE * SIZE * 4)
+def render(size: int) -> bytes:
+    """Draw from the same square geometry, rather than upscale a raster icon."""
+    scale = size // SIZE
+    pixels = bytearray(size * size * 4)
 
     def rectangle(left, top, right, bottom, color):
+        left, top, right, bottom = (coordinate * scale for coordinate in (left, top, right, bottom))
+        row = bytes((*color, 255)) * (right - left)
         for y in range(top, bottom):
-            for x in range(left, right):
-                offset = (y * SIZE + x) * 4
-                pixels[offset:offset + 4] = bytes((*color, 255))
+            offset = (y * size + left) * 4
+            pixels[offset:offset + len(row)] = row
 
-    rectangle(16, 28, 240, 232, (34, 49, 63))
-    rectangle(24, 36, 232, 224, (250, 250, 250))
-    rectangle(24, 36, 232, 86, (249, 107, 87))
-    rectangle(66, 16, 78, 54, (34, 49, 63))
-    rectangle(178, 16, 190, 54, (34, 49, 63))
-    for y in (124, 174):
-        rectangle(40, y, 216, y + 4, (78, 89, 98))
-    for x in (62, 102, 142, 182):
-        for y in (120, 170):
-            rectangle(x, y, x + 3, y + 12, (78, 89, 98))
-    rectangle(58, 102, 150, 116, (255, 134, 24))
-    rectangle(138, 152, 200, 166, (0, 164, 220))
+    # The calendar spans the full square canvas; only the shaped space around
+    # the top binding rings is transparent, with no empty outer rows/columns.
+    rectangle(0, 14, 256, 256, (34, 49, 63))
+    rectangle(9, 23, 247, 247, (250, 250, 250))
+    rectangle(9, 23, 247, 83, (249, 107, 87))
+    rectangle(57, 0, 71, 45, (34, 49, 63))
+    rectangle(185, 0, 199, 45, (34, 49, 63))
+    for y in (128, 187):
+        rectangle(27, y, 229, y + 4, (78, 89, 98))
+    for x in (52, 98, 144, 190):
+        for y in (123, 182):
+            rectangle(x, y, x + 3, y + 14, (78, 89, 98))
+    rectangle(48, 101, 153, 118, (255, 134, 24))
+    rectangle(139, 161, 211, 178, (0, 164, 220))
 
     def chunk(kind, data):
         return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
 
-    rows = b''.join(b'\0' + pixels[y * SIZE * 4:(y + 1) * SIZE * 4] for y in range(SIZE))
-    image = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', SIZE, SIZE, 8, 6, 0, 0, 0))
-             + chunk(b'IDAT', zlib.compress(rows, 9)) + chunk(b'IEND', b''))
-    destination = Path(__file__).resolve().parents[1] / 'custom_components/scheduling_manager/brand/icon.png'
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_bytes(image)
-    print(destination)
+    # Adam7 progressively displays the image. Each pass has its own scanlines;
+    # filter 0 preserves the exact RGBA artwork before lossless zlib compression.
+    rows = bytearray()
+    for start_x, start_y, step_x, step_y in ADAM7:
+        for y in range(start_y, size, step_y):
+            rows.append(0)
+            for x in range(start_x, size, step_x):
+                offset = (y * size + x) * 4
+                rows.extend(pixels[offset:offset + 4])
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 6, 0, 0, 1))
+            + chunk(b'IDAT', zlib.compress(rows, 9)) + chunk(b'IEND', b''))
+
+
+def main() -> None:
+    destination = Path(__file__).resolve().parents[1] / 'custom_components/scheduling_manager/brand'
+    destination.mkdir(parents=True, exist_ok=True)
+    for size, filename in ((256, 'icon.png'), (512, 'icon@2x.png')):
+        path = destination / filename
+        path.write_bytes(render(size))
+        print(path)
 
 
 if __name__ == '__main__':

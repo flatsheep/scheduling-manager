@@ -7,8 +7,8 @@
 - `hacs.json` supplies the display name and existing HA 2026.7.0 minimum.
 - One integration lives under `custom_components/scheduling_manager/`.
   Its `www/` directory contains the committed, prebuilt card. License notices
-  and the original `brand/icon.png` are inside the integration too, so HACS
-  downloads the complete application without needing a second frontend repo.
+  and the original `brand/icon.png` / `brand/icon@2x.png` are inside the integration
+  too, so HACS downloads the complete application without needing a second frontend repo.
 - The integration serves the bundle through HA's static-path API and registers
   its versioned URL through the supported `frontend.add_extra_js_url` API.
   This works with storage and YAML dashboards, without editing dashboard
@@ -49,7 +49,13 @@ integration directory; existing 1.x installations use the
    Custom-repository setup remains a fallback. Confirm the real
    end-user card-picker installation and the documented upgrade from a manual
    install. Repository validation is not itself an end-to-end installation test.
-5. Release **v2.0.3** packages the updated README: default-catalogue installation,
+5. Release **v2.0.4** ships trimmed, transparent, interlaced icons at 256px and
+   512px, with a reproducible dependency-free generator. Custom-integration brand
+   assets ship in the integration's own `brand/` directory, as supported since
+   HA 2026.3; a new central brands-repository entry is not required by that route.
+   Older HACS versions that still use the legacy CDN may not show local brand
+   assets in their catalogue UI. **v2.0.3** packaged the updated README:
+   default-catalogue installation,
    a smaller right-aligned coffee button and the HACS shortcut in Install.
    Scheduling behaviour is unchanged from **v2.0.2**, which added async-safe timezone
    and solar loading, durable timeout failures, dashboard restart recovery and
