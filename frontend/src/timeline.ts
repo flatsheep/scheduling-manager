@@ -8,6 +8,10 @@ import {bandDisabled} from './bands';
 type Endpoint='start_minute'|'end_minute';
 type Marker={key:string;band:Band;endpoint:Endpoint};
 
+// mdi:calendar-clock, drawn directly in SVG to avoid WebKit foreignObject transforms.
+// Its artwork bounds are x=3..23, y=1..23, so its visual centre is (13, 12).
+const calendarClockPath='M15,13H16.5V15.82L18.94,17.23L18.19,18.53L15,16.69V13M19,8H5V19H9.67C9.24,18.09 9,17.07 9,16A7,7 0 0,1 16,9C17.07,9 18.09,9.24 19,9.67V8M5,21C3.89,21 3,20.1 3,19V5C3,3.89 3.89,3 5,3H6V1H8V3H16V1H18V3H19A2,2 0 0,1 21,5V11.1C22.24,12.36 23,14.09 23,16A7,7 0 0,1 16,23C14.09,23 12.36,22.24 11.1,21H5M16,11.15A4.85,4.85 0 0,0 11.15,16C11.15,18.68 13.32,20.85 16,20.85A4.85,4.85 0 0,0 20.85,16C20.85,13.32 18.68,11.15 16,11.15Z';
+
 export class SchedulingTimeline extends LitElement {
   static properties = {sub: {attribute: false},solarMinutes:{attribute:false},previewSolarMinutes:{attribute:false}, previewSub:{attribute:false},previewDay:{type:String},edit: {type: Boolean}, minute: {type: Number}, showCurrentTime:{type:Boolean},canvasWidth: {state:true},activeMarker:{state:true}};
   sub: Sub = {id: '', days: [], bands: []};
@@ -32,7 +36,7 @@ export class SchedulingTimeline extends LitElement {
     .marker {cursor:pointer;touch-action:pan-x pan-y;outline:none}svg.editing .marker{touch-action:none}.marker:focus path,.marker.selected path {stroke:var(--primary-text-color,#222);stroke-width:3}
     .start {fill:var(--orange,#ff861f)} .end {fill:var(--blue,#009edc)}
     .marker.disabled path{fill:#555}.disabled-band{color:#555}.disabled-label{fill:#555;font-weight:700;paint-order:stroke;stroke:var(--card-background-color,#fff);stroke-width:3px}
-    .marker.one-off path,.marker.one-off:focus path,.marker.one-off.selected path{stroke:#e53935;stroke-width:2.5}.one-off-badge{pointer-events:none}.one-off-badge circle{fill:var(--ha-card-background,var(--card-background-color,#fff));stroke:#e53935;stroke-width:2}.one-off-badge ha-icon{display:block;width:24px;height:24px;line-height:0;--mdc-icon-size:24px;--ha-icon-size:24px;color:#e53935;transform:scale(.5833333333);transform-origin:top left}.ghost-preview .one-off-preview .ghost-marker{stroke:#e53935}
+    .marker.one-off path,.marker.one-off:focus path,.marker.one-off.selected path{stroke:#e53935;stroke-width:2.5}.one-off-badge{pointer-events:none}.one-off-badge circle{fill:var(--ha-card-background,var(--card-background-color,#fff));stroke:#e53935;stroke-width:2}.one-off-badge .one-off-icon{fill:#e53935;stroke:none}.ghost-preview .one-off-preview .ghost-marker{stroke:#e53935}
     .current-label rect{fill:var(--ha-card-background,var(--card-background-color,#fff));stroke:var(--orange,#ff861f);stroke-width:2}
     .current-label text{fill:var(--orange,#ff861f);font-weight:700;font-size:16px}
     .marker-tools{display:flex;gap:6px;margin:4px 0;min-height:44px;flex-wrap:wrap}button{font:inherit;min-height:44px;padding:6px 12px;border:1px solid var(--divider-color,#777);border-radius:7px;background:var(--secondary-background-color,#eee);color:var(--primary-text-color,#222);cursor:pointer}button:focus-visible{outline:3px solid var(--primary-color,#03a9f4)}
@@ -44,7 +48,7 @@ export class SchedulingTimeline extends LitElement {
   `;
   private emit(name: string, detail: unknown) { this.dispatchEvent(new CustomEvent(name, {detail, bubbles: true, composed: true})); }
   private disabled(band:Band,sub:Sub=this.sub):boolean {const now=Date.now();return bandDisabled(sub,now)||bandDisabled(band,now);}
-  private oneOffBadge(center:number) {return svg`<g class="one-off-badge" transform=${`translate(${center} 16) scale(1.3)`} role="img" aria-label="One-off time band"><circle r="10"/><foreignObject x="-7" y="-7" width="14" height="14">${html`<ha-icon icon="mdi:calendar-clock" aria-hidden="true"></ha-icon>`}</foreignObject></g>`;}
+  private oneOffBadge(center:number) {return svg`<g class="one-off-badge" transform=${`translate(${center} 16) scale(1.3)`} role="img" aria-label="One-off time band"><circle r="10"/><path class="one-off-icon" transform="scale(.5833333333) translate(-13 -12)" d=${calendarClockPath} aria-hidden="true"/></g>`;}
   private position(event: MouseEvent): number {
     const canvas = this.shadowRoot!.querySelector('svg')!;
     const matrix = canvas.getScreenCTM();

@@ -1,5 +1,22 @@
 # Verification results
 
+## Release 2.0.5: centred one-off badge artwork on iPad
+
+- Replaced the badge's HTML `ha-icon`/SVG `foreignObject` and CSS scaling with
+  a native calendar-clock SVG path. The artwork's actual bounds are centred in
+  the circle for both active and preview one-off bands.
+- Production frontend build, all **26 unit tests** and all **89 browser tests**
+  passed, including artwork geometry at 768px and 1024px viewport widths.
+- Both frontend registration/payload checks and the HACS-only installation/
+  served-card lifecycle test passed in an isolated HA 2026.10.1 container with
+  networking disabled and no production configuration or physical devices.
+- Integration/card versions and both loader cache keys are **2.0.5**. The SVG
+  asset attribution/license is included in root and installed third-party notices.
+- Local HTTP deployment of the fix was verified in the actual HA frontend using
+  Chromium: zero horizontal/vertical offset. Direct iPad/WebKit visual confirmation
+  remains a user-device check; WebKit automation is unavailable on this host.
+- See [release and update instructions](docs/RELEASE_2.0.5.md).
+
 ## Release 2.0.4: trimmed normal and HiDPI brand icons
 
 - Regenerated the original calendar/timeline icon without empty outer rows or

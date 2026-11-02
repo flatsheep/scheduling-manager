@@ -23,7 +23,7 @@ test('one-off creation defaults unchecked and Apply remains draft-only',async({p
   await page.getByRole('button',{name:'Apply',exact:true}).click();
   expect(await page.evaluate(()=>(window as any).mock.writes.length)).toBe(0);
   await expect(page.locator('.editing .one-off-badge')).toBeVisible();
-  await expect(page.locator('.editing .one-off-badge ha-icon')).toHaveAttribute('icon','mdi:calendar-clock');
+  await expect(page.locator('.editing .one-off-badge .one-off-icon')).toBeVisible();
   await expect(page.locator('.editing .one-off-badge circle')).toHaveCSS('stroke','rgb(229, 57, 53)');
   await expect(page.locator('.editing .one-off-outline')).toHaveCount(0);
   await expect(page.locator('.editing .marker.one-off path').first()).toHaveCSS('stroke','rgb(229, 57, 53)');
@@ -101,20 +101,14 @@ test('one-off failed Save retains the draft and Cancel writes no band',async({pa
 });
 
 test('one-off preview uses red outlines without visible one-off text',async({page})=>{
-  // HA renders its icon content at a native 24px; an empty unknown custom
-  // element would conceal clipping inside the SVG foreignObject.
-  await page.evaluate(()=>{
-    if(!customElements.get('ha-icon'))customElements.define('ha-icon',class extends HTMLElement {
-      constructor(){super();this.attachShadow({mode:'open'}).innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><rect width="24" height="24" fill="currentColor"/></svg>';}
-    });
-  });
   const timeline=page.locator('section[aria-label="Schedule 1"] hsm-timeline');
   await timeline.evaluate((el:any)=>{
     el.previewSub={id:'preview',days:[1],bands:[{id:'temporary',one_off:true,start_minute:600,end_minute:660}]};
     el.previewDay='TUE';
   });
   await expect(timeline.locator('.one-off-preview .one-off-badge')).toBeVisible();
-  await expect(timeline.locator('.one-off-preview .one-off-badge ha-icon')).toHaveAttribute('icon','mdi:calendar-clock');
+  await expect(timeline.locator('.one-off-preview .one-off-badge .one-off-icon')).toBeVisible();
+  await expect(timeline.locator('.one-off-badge foreignObject, .one-off-badge ha-icon')).toHaveCount(0);
   const geometry=await timeline.evaluate((el:any)=>{
     const badge=el.shadowRoot.querySelector('.one-off-badge').getBoundingClientRect();
     const markers=[...el.shadowRoot.querySelectorAll('.one-off-preview .ghost-marker')].map((node:any)=>node.getBoundingClientRect());
@@ -124,7 +118,7 @@ test('one-off preview uses red outlines without visible one-off text',async({pag
   expect(geometry.bottom).toBeLessThan(geometry.top);
   const fit=await timeline.locator('.one-off-badge').evaluate(badge=>{
     const circle=badge.querySelector('circle')!.getBoundingClientRect();
-    const icon=badge.querySelector('ha-icon')!.shadowRoot!.querySelector('svg')!.getBoundingClientRect();
+    const icon=badge.querySelector('.one-off-icon')!.getBoundingClientRect();
     return {paddingX:(circle.width-icon.width)/2,paddingY:(circle.height-icon.height)/2,
       offsetX:Math.abs(icon.x+icon.width/2-circle.x-circle.width/2),offsetY:Math.abs(icon.y+icon.height/2-circle.y-circle.height/2)};
   });
@@ -134,4 +128,34 @@ test('one-off preview uses red outlines without visible one-off text',async({pag
   expect(fit.offsetY).toBeLessThan(.5);
   await expect(timeline.locator('.one-off-preview .ghost-marker').first()).toHaveCSS('stroke','rgb(229, 57, 53)');
   await expect(timeline.locator('text').filter({hasText:'One-off'})).toHaveCount(0);
+});
+
+test('one-off artwork stays centred inside its circle in active and preview bands at tablet widths',async({page})=>{
+  await page.evaluate(()=>{
+    const el:any=document.createElement('hsm-timeline');
+    el.dataset.diagnostic='badge-alignment';
+    el.sub={id:'active',days:[0],bands:[{id:'active-band',one_off:true,start_minute:600,end_minute:660}]};
+    el.previewSub={id:'preview',days:[1],bands:[{id:'preview-band',one_off:true,start_minute:900,end_minute:960}]};
+    el.previewDay='TUE';
+    document.body.append(el);
+  });
+  const timeline=page.locator('hsm-timeline[data-diagnostic="badge-alignment"]');
+  for(const width of [768,1024]){
+    await page.setViewportSize({width,height:1024});
+    await expect(timeline.locator('.one-off-badge')).toHaveCount(2);
+    const geometry=await timeline.locator('.one-off-badge').evaluateAll(badges=>badges.map(badge=>{
+      const circle=badge.querySelector('circle')!.getBoundingClientRect();
+      const icon=badge.querySelector('.one-off-icon')!.getBoundingClientRect();
+      return {offsetX:Math.abs(icon.x+icon.width/2-circle.x-circle.width/2),
+        offsetY:Math.abs(icon.y+icon.height/2-circle.y-circle.height/2),
+        paddingX:(circle.width-icon.width)/2,paddingY:(circle.height-icon.height)/2};
+    }));
+    for(const badge of geometry){
+      expect(badge.offsetX).toBeLessThan(.5);
+      expect(badge.offsetY).toBeLessThan(.5);
+      expect(badge.paddingX).toBeGreaterThan(2);
+      expect(badge.paddingY).toBeGreaterThan(2);
+    }
+    await expect(timeline.locator('.one-off-badge foreignObject, .one-off-badge ha-icon')).toHaveCount(0);
+  }
 });
